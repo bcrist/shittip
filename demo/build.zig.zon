@@ -1,0 +1,15 @@
+.{
+    .name = "shittip_demo",
+    .version = "0.0.0",
+    .minimum_zig_version = "0.12.0-dev.2063+804cee3b9",
+    .paths = .{""},
+    .dependencies = .{
+        .shittip = .{
+            .path = "..",
+        },
+        .tempora = .{
+            .url = "git+https://github.com/bcrist/tempora#ee0719f2acdc013c5f9b22df9324fb8a7af93674",
+            .hash = "122051900b4aa8c07567f549615aa7504d7d6a5f8f4cf3dbbf8bd3af5585aa2e94cb",
+        },
+    },
+}
