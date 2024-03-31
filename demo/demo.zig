@@ -12,7 +12,7 @@ pub fn main() !void {
     });
 
     try server.router("/**", .{
-        .{ "shutdown", r.shutdown, r.generic("shutdown.html") },
+        .{ "shutdown", r.method(.GET), r.shutdown, r.generic("shutdown.html") },
     });
 
     const addr = try http.parse_hostname(gpa.allocator(), "localhost", 21345);

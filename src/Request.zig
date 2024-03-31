@@ -214,6 +214,9 @@ const Respond_Err_Options = struct {
     trace: ?*std.builtin.StackTrace = null,
 };
 pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
+    try self.ensure_response_not_started();
+    self.response_state = .sent;
+    
     if (options.err) |e| {
         log.info("C{}: [{} {}] {s} {s}", .{
             self.connection_number,

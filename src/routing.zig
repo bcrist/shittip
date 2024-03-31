@@ -238,16 +238,31 @@ pub fn module(comptime Injector: type, comptime Module: type) Handler {
         pub fn handler(allocator: std.mem.Allocator, req: *Request) anyerror!void {
             _ = allocator;
             switch (req.method) {
-                .GET => if (@hasDecl(Module, "get")) try Injector.call(Module.get, {}),
-                .HEAD => if (@hasDecl(Module, "head")) try Injector.call(Module.head, {}),
-                .POST => if (@hasDecl(Module, "post")) try Injector.call(Module.post, {}),
-                .PUT => if (@hasDecl(Module, "put")) try Injector.call(Module.put, {}),
-                .DELETE => if (@hasDecl(Module, "delete")) try Injector.call(Module.delete, {}),
-                .CONNECT => if (@hasDecl(Module, "connect")) try Injector.call(Module.connect, {}),
-                .OPTIONS => if (@hasDecl(Module, "options")) try Injector.call(Module.options, {}),
-                .TRACE => if (@hasDecl(Module, "trace")) try Injector.call(Module.trace, {}),
-                .PATCH => if (@hasDecl(Module, "patch")) try Injector.call(Module.patch, {}),
+                .GET => if (@hasDecl(Module, "get")) return try Injector.call(Module.get, {}),
+                .HEAD => if (@hasDecl(Module, "head")) return try Injector.call(Module.head, {}),
+                .POST => if (@hasDecl(Module, "post")) return try Injector.call(Module.post, {}),
+                .PUT => if (@hasDecl(Module, "put")) return try Injector.call(Module.put, {}),
+                .DELETE => if (@hasDecl(Module, "delete")) return try Injector.call(Module.delete, {}),
+                .CONNECT => if (@hasDecl(Module, "connect")) return try Injector.call(Module.connect, {}),
+                .OPTIONS => if (@hasDecl(Module, "options")) return try Injector.call(Module.options, {}),
+                .TRACE => if (@hasDecl(Module, "trace")) return try Injector.call(Module.trace, {}),
+                .PATCH => if (@hasDecl(Module, "patch")) return try Injector.call(Module.patch, {}),
                 _ => {},
+            }
+
+            req.respond_err(.{ .status = .method_not_allowed });
+            return error.SkipRemainingHandlers;
+        }
+    }.handler;
+}
+
+pub fn method(comptime required_method: std.http.Method) Handler {
+    return struct {
+        pub fn handler(allocator: std.mem.Allocator, req: *Request) anyerror!void {
+            _ = allocator;
+            if (req.method != required_method) {
+                try req.respond_err(.{ .status = .method_not_allowed });
+                return error.SkipRemainingHandlers;
             }
         }
     }.handler;
