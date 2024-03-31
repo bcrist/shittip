@@ -29,6 +29,14 @@ pub const Default_Injector = dizzy.Injector(struct {
         return server.request.response();
     }
 
+    pub fn inject_maybe_response() ?*std.http.Server.Response {
+        var req = &server.request;
+        switch (req.response_state) {
+            .streaming => |*resp| return resp,
+            else => return null,
+        }
+    }
+
     pub fn inject_pool() *Pool {
         return server.thread_pool;
     }

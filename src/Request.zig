@@ -215,8 +215,13 @@ const Respond_Err_Options = struct {
 };
 pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
     try self.ensure_response_not_started();
+
+    if (!options.empty_content) {
+        try self.set_response_header("content-type", content_type.html);
+    }
+
     self.response_state = .sent;
-    
+
     if (options.err) |e| {
         log.info("C{}: [{} {}] {s} {s}", .{
             self.connection_number,
@@ -243,10 +248,6 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
         return error.CloseConnection;
     };
 
-    if (!options.empty_content) {
-        try self.set_response_header("content-type", content_type.html);
-    }
-    
     self.response_status = options.status;
     self.response_content_length = content.len;
 

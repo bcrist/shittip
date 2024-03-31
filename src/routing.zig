@@ -1,4 +1,5 @@
-const Handler = *const fn(allocator: std.mem.Allocator, req: *Request) anyerror!void;
+pub const Handler = *const fn(req: *Request) anyerror!void;
+pub const Alloc_Handler = *const fn(allocator: std.mem.Allocator, req: *Request) anyerror!void;
 
 pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: anytype) !void {
     comptime var prefix_routes_list: []const []const u8 = &.{};
@@ -126,7 +127,7 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
     }.route);
 }
 
-pub fn generic(comptime source_path: []const u8) Handler {
+pub fn generic(comptime source_path: []const u8) Alloc_Handler {
     const extension = comptime std.fs.path.extension(source_path);
     const source = resource_content(source_path);
     const content = comptime blk: {
@@ -143,7 +144,7 @@ pub fn generic(comptime source_path: []const u8) Handler {
     });
 }
 
-pub fn resource(comptime source_path: []const u8) struct { []const u8, Handler } {
+pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Handler } {
     const extension = std.fs.path.extension(source_path);
     return .{
         resource_path(source_path),
@@ -182,7 +183,7 @@ const Static_Internal_Route_Options = struct {
     etag: ?[]const u8 = null,
     last_modified_utc: ?tempora.Date_Time = null,
 };
-pub fn static_internal(comptime options: Static_Internal_Route_Options) Handler {
+pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Handler {
     return struct {
         pub fn handler(allocator: std.mem.Allocator, req: *Request) anyerror!void {
             var content = options.content;
@@ -235,8 +236,7 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Handler 
 
 pub fn module(comptime Injector: type, comptime Module: type) Handler {
     return struct {
-        pub fn handler(allocator: std.mem.Allocator, req: *Request) anyerror!void {
-            _ = allocator;
+        pub fn handler(req: *Request) anyerror!void {
             switch (req.method) {
                 .GET => if (@hasDecl(Module, "get")) return try Injector.call(Module.get, {}),
                 .HEAD => if (@hasDecl(Module, "head")) return try Injector.call(Module.head, {}),
@@ -250,7 +250,7 @@ pub fn module(comptime Injector: type, comptime Module: type) Handler {
                 _ => {},
             }
 
-            req.respond_err(.{ .status = .method_not_allowed });
+            try req.respond_err(.{ .status = .method_not_allowed });
             return error.SkipRemainingHandlers;
         }
     }.handler;
@@ -258,8 +258,7 @@ pub fn module(comptime Injector: type, comptime Module: type) Handler {
 
 pub fn method(comptime required_method: std.http.Method) Handler {
     return struct {
-        pub fn handler(allocator: std.mem.Allocator, req: *Request) anyerror!void {
-            _ = allocator;
+        pub fn handler(req: *Request) anyerror!void {
             if (req.method != required_method) {
                 try req.respond_err(.{ .status = .method_not_allowed });
                 return error.SkipRemainingHandlers;
