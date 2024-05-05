@@ -22,6 +22,8 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
     }
     const exact_routes = std.ComptimeStringMap(void, exact_routes_list);
 
+    const final_prefix_routes_list = prefix_routes_list[0..].*;
+
     try server.register(prefix, struct {
         pub fn route(allocator: std.mem.Allocator, req: *Request) anyerror!void {
             var path = req.unparsed_path;
@@ -32,7 +34,7 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
                 return;
             }
 
-            for (prefix_routes_list) |prefix_path| {
+            for (final_prefix_routes_list) |prefix_path| {
                 const prefix_path_without_suffix = prefix_path[0 .. prefix_path.len - 2];
                 if (std.mem.startsWith(u8, path, prefix_path_without_suffix)) {
                     _ = try req.chain(try flow_name(allocator, prefix_path));
@@ -49,7 +51,7 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
                 return;
             }
 
-            for (prefix_routes_list) |prefix_path| {
+            for (final_prefix_routes_list) |prefix_path| {
                 const prefix_path_without_suffix = prefix_path[0 .. prefix_path.len - 2];
                 if (std.mem.startsWith(u8, path, prefix_path_without_suffix)) {
                     _ = try req.chain(try flow_name(allocator, prefix_path));
@@ -134,10 +136,10 @@ pub fn generic(comptime source_path: []const u8) Alloc_Handler {
         var buf: [source.len * 2]u8 = undefined;
         var stream = std.io.fixedBufferStream(&buf);
         try template.render(source, {}, stream.writer(), resource_path_anyerror);
-        break :blk stream.getWritten();
+        break :blk stream.getWritten()[0..].*;
     };
     return static_internal(.{
-        .content = content,
+        .content = &content,
         .content_type = content_type.lookup.get(extension),
         .cache_control = "must-revalidate, max-age=600, public",
         .last_modified_utc = root.resources.build_time,
