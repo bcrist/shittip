@@ -191,8 +191,7 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
         pub fn handler(allocator: std.mem.Allocator, req: *Request) anyerror!void {
             var content = options.content;
             switch (req.method) {
-                options.method => {},
-                .HEAD => content = "",
+                .HEAD, options.method => {},
                 else => return,
             }
 
@@ -241,8 +240,12 @@ pub fn module(comptime Injector: type, comptime Module: type) Handler {
     return struct {
         pub fn handler(req: *Request) anyerror!void {
             switch (req.method) {
+                .HEAD => if (@hasDecl(Module, "head")) {
+                    return try Injector.call(Module.head, {});
+                } else if (@hasDecl(Module, "get")) {
+                    return try Injector.call(Module.get, {});
+                },
                 .GET => if (@hasDecl(Module, "get")) return try Injector.call(Module.get, {}),
-                .HEAD => if (@hasDecl(Module, "head")) return try Injector.call(Module.head, {}),
                 .POST => if (@hasDecl(Module, "post")) return try Injector.call(Module.post, {}),
                 .PUT => if (@hasDecl(Module, "put")) return try Injector.call(Module.put, {}),
                 .DELETE => if (@hasDecl(Module, "delete")) return try Injector.call(Module.delete, {}),
