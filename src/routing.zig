@@ -184,13 +184,14 @@ const Static_Internal_Route_Options = struct {
     cache_control: ?[]const u8 = null,
     etag: ?[]const u8 = null,
     last_modified_utc: ?tempora.Date_Time = null,
+    method: std.http.Method = .GET,
 };
 pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Handler {
     return struct {
         pub fn handler(allocator: std.mem.Allocator, req: *Request) anyerror!void {
             var content = options.content;
             switch (req.method) {
-                .GET => {},
+                options.method => {},
                 .HEAD => content = "",
                 else => return,
             }
@@ -270,6 +271,7 @@ pub fn method(comptime required_method: std.http.Method) Handler {
 }
 
 pub fn shutdown(req: *Request, pool: *Pool) !void {
+    log.info("starting shutdown", .{});
     try req.set_response_header("cache-control", "no-cache");
     req.response_keep_alive = false;
     pool.stop();
