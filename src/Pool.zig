@@ -28,12 +28,12 @@ pub fn shared_task(self: *Pool, comptime func: anytype, args: std.meta.ArgsTuple
         },
 
         fn run_closure(task: *Shared_Task) void {
-            const closure = @fieldParentPtr(@This(), "shared_task", task);
+            const closure: *@This() = @fieldParentPtr("shared_task", task);
             @call(.auto, func, closure.args);
         }
 
         fn deinit_closure(task: *Shared_Task) void {
-            const closure = @fieldParentPtr(@This(), "shared_task", task);
+            const closure: *@This() = @fieldParentPtr("shared_task", task);
             closure.allocator.destroy(closure);
         }
     };
@@ -128,8 +128,8 @@ pub fn submit(self: *Pool, comptime func: anytype, args: std.meta.ArgsTuple(@Typ
         node: Queue.Node = .{ .data = .{ .func = run } },
 
         fn run(task: *Task) void {
-            const node = @fieldParentPtr(Queue.Node, "data", task);
-            const closure = @fieldParentPtr(@This(), "node", node);
+            const node: *Queue.Node = @fieldParentPtr("data", task);
+            const closure: *@This() = @fieldParentPtr("node", node);
             defer closure.deinit();
             @call(.auto, func, closure.args);
         }

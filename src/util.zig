@@ -9,7 +9,7 @@ pub fn parse_hostname(temp: std.mem.Allocator, hostname: []const u8, port: u16) 
     if (list.addrs.len == 0) return error.UnknownHostName;
 
     for (list.addrs) |addr| {
-        if (addr.any.family == std.os.AF.INET) return addr;
+        if (addr.any.family == std.posix.AF.INET) return addr;
     }
     
     return list.addrs[0];

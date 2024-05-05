@@ -1,20 +1,20 @@
 .{
     .name = "shittip",
-    .version = "0.0.0",
-    .minimum_zig_version = "0.12.0-dev.2063+804cee3b9",
+    .version = "0.1.1",
+    .minimum_zig_version = "0.12.0",
     .paths = .{""},
     .dependencies = .{
         .@"Zig-TempAllocator" = .{
-            .url = "git+https://github.com/bcrist/Zig-TempAllocator#4ba898503abbc1de0abef28810f3e14ebfd6a660",
-            .hash = "12205fe84f1c2e80b275a5c18c0b5b8e740c86463dc71458d0030e863d5e0fcb5f58",
+            .url = "git+https://github.com/bcrist/Zig-TempAllocator#2401120308ba920ca95fdcf9a311c63341a7e04d",
+            .hash = "12207e7d78892ee60eeb80dc6c8f798a9e6cdc396c8fcc668ed4bffbd2863330ea18",
         },
         .tempora = .{
-            .url = "git+https://github.com/bcrist/tempora#ee0719f2acdc013c5f9b22df9324fb8a7af93674",
-            .hash = "122051900b4aa8c07567f549615aa7504d7d6a5f8f4cf3dbbf8bd3af5585aa2e94cb",
+            .url = "git+https://github.com/bcrist/tempora#a0eb5f4b88954d0d0ff6abe2900e4010d9cd44e1",
+            .hash = "12209d13ab40c25a80c4d96a2d8addc9272c3df4c42d13199d51982e8d0fc71ef4c0",
         },
         .dizzy = .{
-            .url = "git+https://github.com/bcrist/dizzy#d908cbcda09254352b15ed8c13b5695498bcb06f",
-            .hash = "12207015d059dbcd2bdf6dd0b5b0e5ab877d8e592b143531bbbaf9401794a1fabefe",
+            .url = "git+https://github.com/bcrist/dizzy#6ffd71accd09c0d45247205958ca281876919d50",
+            .hash = "12205e1788edac39731a095a16ab12c52403e59a87b7b246810dbe12f00c6891b825",
         },
     },
 }

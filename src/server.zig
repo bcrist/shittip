@@ -108,11 +108,11 @@ pub fn Server(comptime Injector: type) type {
                     connection.address,
                 });
 
-                const timeout: std.os.timeval = .{
+                const timeout: std.posix.timeval = .{
                     .tv_sec = self.receive_timeout_seconds,
                     .tv_usec = 0,
                 };
-                std.os.setsockopt(connection.stream.handle, std.os.SOL.SOCKET, std.os.SO.RCVTIMEO, std.mem.asBytes(&timeout)) catch |err| {
+                std.posix.setsockopt(connection.stream.handle, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, std.mem.asBytes(&timeout)) catch |err| {
                     log.warn("C{}: Failed to set socket receive timeout: {}", .{ connection_num, err });
                 };
 

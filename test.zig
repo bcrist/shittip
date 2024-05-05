@@ -46,7 +46,7 @@ test "server lifecycle" {
             .keep_alive = false,
         });
         defer req.deinit();
-        try req.send(.{});
+        try req.send();
         try req.wait();
         const content = try req.reader().readAllAlloc(std.testing.allocator, 10000);
         defer std.testing.allocator.free(content);
@@ -58,7 +58,7 @@ test "server lifecycle" {
             .keep_alive = false,
         });
         defer req.deinit();
-        try req.send(.{});
+        try req.send();
         try req.wait();
     }
 }
