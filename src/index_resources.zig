@@ -147,7 +147,8 @@ fn resource_content(path: []const u8) anyerror![]const u8 {
 }
 
 fn process_resource(path: []const u8) !void {
-    const owned_path = try std.fs.path.resolvePosix(arena.allocator(), &.{ path });
+    const owned_path = try arena.allocator().dupe(u8, path);
+    std.mem.replaceScalar(u8, owned_path, '\\', '/');
     const ext = std.fs.path.extension(path);
 
     // prevent reference cycles from causing stack overflow:
