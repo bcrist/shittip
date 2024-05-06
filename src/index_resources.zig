@@ -147,13 +147,13 @@ fn resource_content(path: []const u8) anyerror![]const u8 {
 }
 
 fn process_resource(path: []const u8) !void {
-    const owned_path = try arena.allocator().dupe(u8, path);
+    const owned_path = try std.fs.path.resolvePosix(arena.allocator(), &.{ path });
     const ext = std.fs.path.extension(path);
 
     // prevent reference cycles from causing stack overflow:
     try digest_map.put(owned_path, std.mem.zeroes(Digest));
 
-    var the_resource_content = try current_dir.readFileAlloc(gpa.allocator(), owned_path, 100_000_000);
+    var the_resource_content = try current_dir.readFileAlloc(gpa.allocator(), path, 100_000_000);
     defer gpa.allocator().free(the_resource_content);
 
     if (template_extensions.get(ext) != null) {

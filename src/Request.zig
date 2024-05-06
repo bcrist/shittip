@@ -325,7 +325,9 @@ fn maybe_respond_err(self: *Request, options: Respond_Err_Options) error{CloseCo
 
 pub fn render(self: *Request, comptime template_path: []const u8, data: anytype) anyerror!void {
     if (self.response_state == .not_started) {
-        _ = try self.maybe_add_response_header("content-type", comptime content_type.lookup.get(std.fs.path.extension(template_path)));
+        if (comptime content_type.lookup.get(std.fs.path.extension(template_path))) |ct| {
+            _ = try self.maybe_add_response_header("content-type", ct);
+        }
         _ = try self.maybe_add_response_header("cache-control", "must-revalidate, max-age=600, private");
     }
     const res = try self.response();
