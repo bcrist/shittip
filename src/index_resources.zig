@@ -26,7 +26,8 @@ const Digest = [Hash.digest_length]u8;
 
 var out: std.fs.File.Writer = undefined;
 var dep_out: std.fs.File.Writer = undefined;
-var map: std.StringHashMap(Digest) = undefined;
+var digest_map: std.StringHashMap(Digest) = undefined;
+var content_map: std.StringHashMap([]const u8) = undefined;
 var content: std.ArrayList(u8) = undefined;
 var template_extensions: std.StringHashMap(void) = undefined;
 var current_dir: *std.fs.Dir = undefined;
@@ -61,8 +62,11 @@ pub fn main() !void {
     content = std.ArrayList(u8).init(gpa.allocator());
     defer content.deinit();
 
-    map = std.StringHashMap(Digest).init(gpa.allocator());
-    defer map.deinit();
+    digest_map = std.StringHashMap(Digest).init(gpa.allocator());
+    defer digest_map.deinit();
+
+    content_map = std.StringHashMap([]const u8).init(gpa.allocator());
+    defer content_map.deinit();
 
     const f = try std.fs.cwd().createFile(out_path, .{});
     defer f.close();
@@ -119,47 +123,67 @@ var temp_path_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
 fn resource_path(path: []const u8) anyerror![]const u8 {
     const ext = std.fs.path.extension(path);
 
-    if (map.get(path)) |digest| {
+    if (digest_map.get(path)) |digest| {
         if (std.mem.eql(u8, &digest, &std.mem.zeroes(Digest))) {
             log.err("Circular dependency detected involving {s}", .{ path });
             return error.CircularDependency;
         }
-
-        return std.fmt.bufPrint(&temp_path_buf, "/{}{s}", .{ std.fmt.fmtSliceHexLower(&digest), ext });
+    } else {
+        try process_resource(path);
     }
+    return std.fmt.bufPrint(&temp_path_buf, "/{}{s}", .{ std.fmt.fmtSliceHexLower(&digest_map.get(path).?), ext });
+}
 
+fn resource_content(path: []const u8) anyerror![]const u8 {
+    if (digest_map.get(path)) |digest| {
+        if (std.mem.eql(u8, &digest, &std.mem.zeroes(Digest))) {
+            log.err("Circular dependency detected involving {s}", .{ path });
+            return error.CircularDependency;
+        }
+    } else {
+        try process_resource(path);
+    }
+    return content_map.get(path).?;
+}
+
+fn process_resource(path: []const u8) !void {
     const owned_path = try arena.allocator().dupe(u8, path);
+    const ext = std.fs.path.extension(path);
 
     // prevent reference cycles from causing stack overflow:
-    try map.put(owned_path, std.mem.zeroes(Digest));
+    try digest_map.put(owned_path, std.mem.zeroes(Digest));
 
-    var resource_content = try current_dir.readFileAlloc(gpa.allocator(), owned_path, 100_000_000);
-    defer gpa.allocator().free(resource_content);
+    var the_resource_content = try current_dir.readFileAlloc(gpa.allocator(), owned_path, 100_000_000);
+    defer gpa.allocator().free(the_resource_content);
 
     if (template_extensions.get(ext) != null) {
         var builder = std.ArrayList(u8).init(gpa.allocator());
         defer builder.deinit();
 
-        try template.render(resource_content, {}, builder.writer(), resource_path);
+        try template.render(the_resource_content, {}, builder.writer(), .{
+            .resource_path = resource_path,
+            .resource_content = resource_content,
+        });
 
-        gpa.allocator().free(resource_content);
-        resource_content = try builder.toOwnedSlice();
+        gpa.allocator().free(the_resource_content);
+        the_resource_content = try builder.toOwnedSlice();
 
         try content.writer().print("    pub const {} = \"{}\";\n", .{
             std.zig.fmtId(owned_path),
-            std.zig.fmtEscapes(resource_content),
+            std.zig.fmtEscapes(the_resource_content),
         });
     } else {
         try content.writer().print("    pub const {} = \"{}\";\n", .{
             std.zig.fmtId(owned_path),
-            std.zig.fmtEscapes(resource_content),
+            std.zig.fmtEscapes(the_resource_content),
         });
     }
 
     var hash: Digest = undefined;
-    Hash.hash(resource_content, &hash, .{});
+    Hash.hash(the_resource_content, &hash, .{});
 
-    try map.put(owned_path, hash);
+    try digest_map.put(owned_path, hash);
+    try content_map.put(owned_path, try arena.allocator().dupe(u8, the_resource_content));
 
     try dep_out.print("\"{}{s}{}\" ", .{
         std.zig.fmtEscapes(current_dir_path),
@@ -171,8 +195,6 @@ fn resource_path(path: []const u8) anyerror![]const u8 {
         std.zig.fmtId(owned_path),
         std.fmt.fmtSliceHexLower(&hash),
     });
-
-    return std.fmt.bufPrint(&temp_path_buf, "/{}{s}", .{ std.fmt.fmtSliceHexLower(&hash), ext });
 }
 
 const log = std.log.scoped(.index_resources);
