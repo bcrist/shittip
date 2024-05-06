@@ -133,6 +133,7 @@ pub fn generic(comptime source_path: []const u8) Alloc_Handler {
     const extension = comptime std.fs.path.extension(source_path);
     const source = resource_content(source_path);
     const content = comptime blk: {
+        @setEvalBranchQuota(100_000);
         var buf: [source.len * 2]u8 = undefined;
         var stream = std.io.fixedBufferStream(&buf);
         try template.render(source, {}, stream.writer(), resource_path_anyerror);
@@ -160,9 +161,15 @@ pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Han
     };
 }
 
-pub fn resource_path_anyerror(comptime source_path: []const u8) anyerror![]const u8 {
+pub fn resource_path_anyerror(source_path: []const u8) anyerror![]const u8 {
     // TODO fix templater to allow the return type to have no error
-    return resource_path(source_path);
+    const extension = std.fs.path.extension(source_path);
+    inline for (@typeInfo(@TypeOf(root.resources)).Struct.fields) |field| {
+        if (std.mem.eql(u8, source_path, field.name)) {
+            return comptime "/" ++ @field(root.resources, field.name) ++ extension;
+        }
+    }
+    return error.InvalidResource;
 }
 
 pub fn resource_path(comptime source_path: []const u8) []const u8 {

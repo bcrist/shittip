@@ -140,7 +140,7 @@ fn resource_path(path: []const u8) anyerror![]const u8 {
         var builder = std.ArrayList(u8).init(gpa.allocator());
         defer builder.deinit();
 
-        try template.render_rt(resource_content, builder.writer(), resource_path);
+        try template.render(resource_content, {}, builder.writer(), resource_path);
 
         gpa.allocator().free(resource_content);
         resource_content = try builder.toOwnedSlice();

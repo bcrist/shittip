@@ -1,67 +1,158 @@
-const Resource_Path_Func = *const fn (comptime []const u8) anyerror![]const u8;
-const Resource_Path_Func_RT = *const fn ([]const u8) anyerror![]const u8;
+const Resource_Path_Func = *const fn ([]const u8) anyerror![]const u8;
 
-pub fn render(comptime source: []const u8, data: anytype, writer: anytype, resource_path: Resource_Path_Func) !void {
-    @setEvalBranchQuota(100_000);
-    comptime var start = 0;
-    inline while (start < source.len) {
-        if (comptime std.mem.indexOfPos(u8, source, start, "{{")) |brackets_open| {
-            try writer.writeAll(source[start..brackets_open]);
-            const brackets_close = std.mem.indexOfPos(u8, source, brackets_open + 2, "}}") orelse source.len;
-            const contents = source[brackets_open + 2 .. brackets_close];
-            try render_replacement(contents, data, writer, resource_path);
-            start = brackets_close + 2;
+const Token = union (enum) {
+    text: []const u8,
+    replacement: []const u8,
+    open: []const u8,
+    close,
+};
+
+const Iterator = struct {
+    remaining: []const u8,
+
+    pub fn next(self: *Iterator) ?Token {
+        const remaining = self.remaining;
+        if (std.mem.indexOf(u8, remaining, "{{")) |brackets_open| {
+            if (brackets_open > 0) {
+                self.remaining = remaining[brackets_open..];
+                return .{ .text = remaining[0..brackets_open] };
+            }
+            const brackets_close = std.mem.indexOf(u8, remaining, "}}") orelse remaining.len;
+            const contents = remaining[2..brackets_close];
+            self.remaining = remaining[@min(remaining.len, brackets_close + 2) ..];
+
+            if (contents.len == 1 and contents[0] == '~') {
+                return .close;
+            } else if (std.mem.endsWith(u8, contents, "?")) {
+                return .{ .open = contents[0 .. contents.len - 1] };
+            } else {
+                return .{ .replacement = contents };
+            }
+        } else if (remaining.len > 0) {
+            self.remaining = "";
+            return .{ .text = remaining };
         } else {
-            try writer.writeAll(source[start..]);
-            start = source.len;
+            return null;
         }
     }
+};
+
+pub fn render(source: []const u8, data: anytype, writer: anytype, resource_path: Resource_Path_Func) !void {
+    var iter = Iterator { .remaining = source };
+    try render_block(&iter, data, writer, resource_path);
 }
 
-pub fn render_replacement(comptime syntax: []const u8, data: anytype, writer: anytype, resource_path: Resource_Path_Func) !void {
+fn render_block(iter: *Iterator, data: anytype, writer: anytype, resource_path: Resource_Path_Func) !void {
+    while (iter.next()) |token| switch (token) {
+        .text => |str| try writer.writeAll(str),
+        .replacement => |str| try render_replacement(str, data, writer, resource_path),
+        .open => |str| try render_open_struct(iter, str, data, writer, resource_path),
+        .close => return,
+    };
+}
+
+fn skip_block(iter: *Iterator) void {
+    while (iter.next()) |token| switch (token) {
+        .text, .replacement => {},
+        .open => skip_block(iter),
+        .close => return,
+    };
+}
+
+fn render_replacement(syntax: []const u8, data: anytype, writer: anytype, resource_path: Resource_Path_Func) !void {
     const T = @TypeOf(data);
-
-    comptime var iter = std.mem.tokenizeAny(u8, syntax, &std.ascii.whitespace);
-    inline while (iter.next()) |token| {
-        if (comptime std.mem.eql(u8, token, "@resource")) {
-            const path = iter.next() orelse @compileError("Expected file path after @resource");
-            try writer.writeAll(try resource_path(path));
-        } else if (@hasField(T, token)) {
-            try writer.print("{}", .{ @field(data, token) });
-        } else @compileError("Unknown field: " ++ token);
-    }
-}
-
-
-pub fn render_rt(source: []const u8, writer: anytype, resource_path: Resource_Path_Func_RT) !void {
-    var start: usize = 0;
-    while (start < source.len) {
-        if (std.mem.indexOfPos(u8, source, start, "{{")) |brackets_open| {
-            try writer.writeAll(source[start..brackets_open]);
-            const brackets_close = std.mem.indexOfPos(u8, source, brackets_open + 2, "}}") orelse source.len;
-            const contents = source[brackets_open + 2 .. brackets_close];
-            try render_replacement_rt(contents, writer, resource_path);
-            start = brackets_close + 2;
-        } else {
-            try writer.writeAll(source[start..]);
-            start = source.len;
-        }
-    }
-}
-
-pub fn render_replacement_rt(syntax: []const u8, writer: anytype, resource_path: Resource_Path_Func_RT) !void {
     var iter = std.mem.tokenizeAny(u8, syntax, &std.ascii.whitespace);
     while (iter.next()) |token| {
         if (std.mem.eql(u8, token, "@resource")) {
-            const path = iter.next() orelse {
-                log.err("Expected file path after @resource", .{});
-                return error.InvalidTemplate;
-            };
+            const path = iter.next() orelse return error.TemplateSyntax;
             try writer.writeAll(try resource_path(path));
-        } else {
-            log.err("Unknown field: {s}", .{ token });
-            return error.InvalidTemplate;
+        } else if (std.mem.eql(u8, token, "*")) {
+            try render_value(data, writer);
+        } else if (@typeInfo(T) == .Struct) {
+            inline for (@typeInfo(T).Struct.fields) |field| {
+                if (std.mem.eql(u8, token, field.name)) {
+                    try render_value(@field(data, field.name), writer);
+                }
+            }
+        } else return error.TemplateSyntax;
+    }
+}
+
+fn render_value(value: anytype, writer: anytype) !void {
+    const T = @TypeOf(value);
+    switch (@typeInfo(T)) {
+        .Pointer => |info| {
+            if (info.size == .Slice) {
+                if (info.child == u8) {
+                    try writer.print("{s}", .{ value });
+                } else {
+                    try writer.print("{any}", .{ value });
+                }
+            } else {
+                try render_value(value.*, writer);
+            }
+        },
+        .Optional => {
+            if (value) |v| try render_value(v, writer);
+        },
+        else => {
+            try writer.print("{}", .{ value });
+        },
+    }
+}
+
+fn render_open_struct(iter: *Iterator, syntax: []const u8, data: anytype, writer: anytype, resource_path: Resource_Path_Func) !void {
+    const T = @TypeOf(data);
+    var found_field = false;
+    if (@typeInfo(T) == .Struct) {
+        inline for (@typeInfo(T).Struct.fields) |field| {
+            if (std.mem.eql(u8, syntax, field.name)) {
+                try render_open_value(iter, @field(data, field.name), writer, resource_path);
+                found_field = true;
+            }
         }
+    }
+    if (!found_field) return error.TemplateSyntax;
+}
+
+fn render_open_value(iter: *Iterator, value: anytype, writer: anytype, resource_path: Resource_Path_Func) !void {
+    const T = @TypeOf(value);
+    switch (@typeInfo(T)) {
+        .Pointer => |info| {
+            if (info.size == .Slice) {
+                for (value) |v| {
+                    var iter_copy = iter.*;
+                    try render_block(&iter_copy, v, writer, resource_path);
+                }
+                skip_block(iter);
+            } else {
+                try render_open_value(value.*, writer);
+            }
+        },
+        .Array => {
+            for (value) |v| {
+                var iter_copy = iter.*;
+                try render_block(&iter_copy, v, writer, resource_path);
+            }
+            skip_block(iter);
+        },
+        .Optional => {
+            if (value) |v| {
+                try render_block(iter, v, writer, resource_path);
+            } else {
+                skip_block(iter);
+            }
+        },
+        .Bool => {
+            if (value) {
+                try render_block(iter, value, writer, resource_path);
+            } else {
+                skip_block(iter);
+            }
+        },
+        else => {
+            try render_block(iter, value, writer, resource_path);
+        },
     }
 }
 
