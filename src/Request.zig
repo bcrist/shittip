@@ -323,9 +323,24 @@ fn maybe_respond_err(self: *Request, options: Respond_Err_Options) error{CloseCo
     };
 }
 
+pub fn render(self: *Request, comptime template_path: []const u8, data: anytype) anyerror!void {
+    if (self.response_state == .not_started) {
+        _ = try self.maybe_add_response_header("content-type", comptime content_type.lookup.get(std.fs.path.extension(template_path)));
+        _ = try self.maybe_add_response_header("cache-control", "must-revalidate, max-age=600, private");
+    }
+    const res = try self.response();
+    const source = routing.resource_content(template_path);
+    try template.render(source, data, res.writer(), .{
+        .resource_path = routing.resource_path_anyerror,
+        .resource_content = routing.resource_content_anyerror,
+    });
+}
+
 const log = std.log.scoped(.http);
 
 const content_type = @import("content_type.zig");
+const template = @import("template.zig");
+const routing = @import("routing.zig");
 const server = @import("server.zig");
 const util = @import("util.zig");
 const tempora = @import("tempora");
