@@ -101,6 +101,19 @@ pub fn unparsed_path_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar)
     return std.mem.splitScalar(u8, self.unparsed_path, '/');
 }
 
+pub fn get_path_param(self: *Request, name: []const u8) ?[]const u8 {
+    var iter = self.path_iterator();
+    while (iter.next()) |part| {
+        if (std.mem.indexOfScalar(u8, part, ':')) |end| {
+            const prefix = part[0 .. end];
+            if (std.mem.eql(u8, name, prefix)) {
+                return part[end + 1 ..];
+            }
+        }
+    }
+    return null;
+}
+
 pub fn ensure_response_not_started(self: *Request) !void {
     if (self.response_state != .not_started) return error.ResponseAlreadyStarted;
 }
