@@ -101,14 +101,31 @@ pub fn unparsed_path_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar)
     return std.mem.splitScalar(u8, self.unparsed_path, '/');
 }
 
-pub fn get_path_param(self: *Request, name: []const u8) ?[]const u8 {
+pub fn get_path_param(self: *Request, name: []const u8) !?[]const u8 {
+    var temp = std.ArrayList(u8).init(server.temp.allocator());
     var iter = self.path_iterator();
     while (iter.next()) |part| {
         if (std.mem.indexOfScalar(u8, part, ':')) |end| {
-            const prefix = part[0 .. end];
+            temp.clearRetainingCapacity();
+            const prefix = try percent_encoding.decode_append(&temp, part[0 .. end]);
             if (std.mem.eql(u8, name, prefix)) {
-                return part[end + 1 ..];
+                temp.clearRetainingCapacity();
+                return try percent_encoding.decode_append(&temp, part[end + 1 ..]);
             }
+        }
+    }
+    return null;
+}
+
+pub fn query_iterator(self: *Request, temp: std.mem.Allocator) Query_Iterator {
+    return Query_Iterator.init(temp, self.query);
+}
+
+pub fn get_query_param(self: *Request, name: []const u8) !?[]const u8 {
+    var iter = self.query_iterator(server.temp.allocator());
+    while (try iter.next()) |param| {
+        if (std.mem.eql(u8, param.name, name)) {
+            return param.value;
         }
     }
     return null;
@@ -383,6 +400,8 @@ pub fn render(self: *Request, comptime template_path: []const u8, data: anytype)
 
 const log = std.log.scoped(.http);
 
+const Query_Iterator = @import("Query_Iterator.zig");
+const percent_encoding = @import("percent_encoding.zig");
 const content_type = @import("content_type.zig");
 const template = @import("template.zig");
 const routing = @import("routing.zig");

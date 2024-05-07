@@ -136,7 +136,7 @@ fn render_value(value: anytype, writer: anytype, raw: bool) anyerror!void {
         },
         .Array => |info| {
             if (info.child == u8) {
-                try render_string(value, writer, raw);
+                try render_string(&value, writer, raw);
             } else {
                 try writer.print("{any}", .{ &value });
             }
