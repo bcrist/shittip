@@ -174,7 +174,7 @@ fn render_string(str: []const u8, writer: anytype, raw: bool) anyerror!void {
         while (iter.next()) |chunk| {
             try writer.writeAll(chunk);
             if (iter.index) |i| {
-                try writer.writeAll(switch (iter.buffer[i]) {
+                try writer.writeAll(switch (iter.buffer[i-1]) {
                     '&' => "&amp;",
                     '<' => "&lt;",
                     '>' => "&gt;",

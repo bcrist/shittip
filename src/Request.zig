@@ -131,6 +131,17 @@ pub fn get_query_param(self: *Request, name: []const u8) !?[]const u8 {
     return null;
 }
 
+pub fn has_query_param(self: *Request, name: []const u8) !bool {
+    var iter = self.query_iterator(server.temp.allocator());
+    defer iter.deinit();
+    while (try iter.next()) |param| {
+        if (std.mem.eql(u8, param.name, name)) {
+            return true;
+        }
+    }
+    return null;
+}
+
 pub fn ensure_response_not_started(self: *Request) !void {
     if (self.response_state != .not_started) return error.ResponseAlreadyStarted;
 }
@@ -388,7 +399,7 @@ pub fn render(self: *Request, comptime template_path: []const u8, data: anytype)
         if (comptime content_type.lookup.get(std.fs.path.extension(template_path))) |ct| {
             _ = try self.maybe_add_response_header("content-type", ct);
         }
-        _ = try self.maybe_add_response_header("cache-control", "must-revalidate, max-age=600, private");
+        _ = try self.maybe_add_response_header("cache-control", "no-cache");
     }
     const res = try self.response();
     const source = routing.resource_content(template_path);
