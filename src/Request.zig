@@ -226,7 +226,7 @@ const Respond_Err_Options = struct {
     err: ?anyerror = null,
     trace: ?*std.builtin.StackTrace = null,
 };
-pub fn respond_err(self: *Request, options: Respond_Err_Options) error{CloseConnection}!void {
+pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
     if (self.response_state != .not_started) {
         if (options.err) |err| {
             log.err("C{}: [{} {} after response started] {s} {s}", .{

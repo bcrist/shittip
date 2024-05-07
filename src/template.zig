@@ -78,69 +78,130 @@ fn skip_block(iter: *Iterator) void {
 }
 
 fn render_replacement(syntax: []const u8, data: anytype, writer: anytype, options: Render_Options) anyerror!void {
-    const T = @TypeOf(data);
     var iter = std.mem.tokenizeAny(u8, syntax, &std.ascii.whitespace);
     while (iter.next()) |token| {
         if (std.mem.eql(u8, token, "@resource")) {
-            const path = iter.next() orelse return error.TemplateSyntax;
+            const path = iter.next() orelse {
+                log.err("Expected path after @resource", .{});
+                return error.TemplateSyntax;
+            };
             try writer.writeAll(try options.resource_path(path));
         } else if (std.mem.eql(u8, token, "@include")) {
-            const path = iter.next() orelse return error.TemplateSyntax;
+            const path = iter.next() orelse {
+                log.err("Expected path after @include", .{});
+                return error.TemplateSyntax;
+            };
             try render(try options.resource_content(path), data, writer, options);
-        } else if (std.mem.eql(u8, token, "*")) {
-            try render_value(data, writer);
-        } else if (@typeInfo(T) == .Struct) {
-            inline for (@typeInfo(T).Struct.fields) |field| {
-                if (std.mem.eql(u8, token, field.name)) {
-                    try render_value(@field(data, field.name), writer);
-                }
-            }
-        } else return error.TemplateSyntax;
+        } else if (std.mem.eql(u8, token, "@raw")) {
+            const name = iter.next() orelse {
+                log.err("Expected field name or * after @raw", .{});
+                return error.TemplateSyntax;
+            };
+            try render_field_or_value(name, data, writer, true);
+        } else {
+            try render_field_or_value(token, data, writer, false);
+        }
     }
 }
 
-fn render_value(value: anytype, writer: anytype) anyerror!void {
+fn render_field_or_value(name: []const u8, data: anytype, writer: anytype, raw: bool) anyerror!void {
+    const T = @TypeOf(data);
+    if (std.mem.eql(u8, name, "*")) {
+        try render_value(data, writer, raw);
+    } else if (@typeInfo(T) == .Struct) {
+        inline for (@typeInfo(T).Struct.fields) |field| {
+            if (std.mem.eql(u8, name, field.name)) {
+                try render_value(@field(data, field.name), writer, raw);
+            }
+        }
+    } else {
+        log.err("Field access requires data to be a struct; found {s}", .{ @typeName(@TypeOf(data)) });
+        return error.TemplateSyntax;
+    }
+}
+
+fn render_value(value: anytype, writer: anytype, raw: bool) anyerror!void {
     const T = @TypeOf(value);
     switch (@typeInfo(T)) {
         .Pointer => |info| {
             if (info.size == .Slice) {
                 if (info.child == u8) {
-                    try writer.print("{s}", .{ value });
+                    try render_string(value, writer, raw);
                 } else {
                     try writer.print("{any}", .{ value });
                 }
             } else {
-                try render_value(value.*, writer);
+                try render_value(value.*, writer, raw);
             }
         },
         .Array => |info| {
             if (info.child == u8) {
-                try writer.print("{s}", .{ &value });
+                try render_string(value, writer, raw);
             } else {
                 try writer.print("{any}", .{ &value });
             }
         },
         .Optional => {
-            if (value) |v| try render_value(v, writer);
+            if (value) |v| try render_value(v, writer, raw);
+        },
+        .Union => switch (value) {
+            inline else => |v| try render_value(v, writer, raw),
+        },
+        .Bool => {
+            try writer.writeAll(if (value) "true" else "false");
+        },
+        .Int, .ComptimeInt, .Vector => {
+            try writer.print("{}", .{ value });
+        },
+        .Float, .ComptimeFloat => {
+            try writer.print("{d}", .{ value });
+        },
+        .Enum, .EnumLiteral => {
+            try writer.print("{s}", .{ @tagName(value) });
         },
         else => {
-            try writer.print("{}", .{ value });
+            log.err("Expected value, but found {s}", .{ @typeName(T) });
+            return error.TemplateSyntax;
         },
     }
 }
 
-fn render_open_struct(iter: *Iterator, syntax: []const u8, data: anytype, writer: anytype, options: Render_Options) anyerror!void {
+fn render_string(str: []const u8, writer: anytype, raw: bool) anyerror!void {
+    if (raw) {
+        try writer.writeAll(str);
+    } else {
+        var iter = std.mem.splitAny(u8, str, "&<>\"'");
+        while (iter.next()) |chunk| {
+            try writer.writeAll(chunk);
+            if (iter.index) |i| {
+                try writer.writeAll(switch (iter.buffer[i]) {
+                    '&' => "&amp;",
+                    '<' => "&lt;",
+                    '>' => "&gt;",
+                    '"' => "&quot;",
+                    '\'' => "&#39;",
+                    else => unreachable,
+                });
+            }
+        }
+    }
+}
+
+fn render_open_struct(iter: *Iterator, name: []const u8, data: anytype, writer: anytype, options: Render_Options) anyerror!void {
     const T = @TypeOf(data);
     var found_field = false;
     if (@typeInfo(T) == .Struct) {
         inline for (@typeInfo(T).Struct.fields) |field| {
-            if (std.mem.eql(u8, syntax, field.name)) {
+            if (std.mem.eql(u8, name, field.name)) {
                 try render_open_value(iter, @field(data, field.name), writer, options);
                 found_field = true;
             }
         }
     }
-    if (!found_field) return error.TemplateSyntax;
+    if (!found_field) {
+        log.err("No field named {s} found in {s}", .{ name, @typeName(T) });
+        return error.TemplateSyntax;
+    }
 }
 
 fn render_open_value(iter: *Iterator, value: anytype, writer: anytype, options: Render_Options) anyerror!void {
