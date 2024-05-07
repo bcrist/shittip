@@ -13,6 +13,11 @@ pub fn etag_iterator(raw_value: []const u8) ETag_Iterator {
     return .{ .remaining = raw_value };
 }
 
+pub const Query_Iterator = @import("Query_Iterator.zig");
+pub fn query_iterator(allocator: std.mem.Allocator, raw_value: []const u8) Query_Iterator {
+    return Query_Iterator.init(allocator, raw_value);
+}
+
 pub fn temp() std.mem.Allocator {
     return server.temp.allocator();
 }

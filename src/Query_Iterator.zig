@@ -11,10 +11,14 @@ pub const Query_Param = struct {
 pub fn init(allocator: std.mem.Allocator, query: []const u8) Query_Iterator {
     const params = if (std.mem.startsWith(u8, query, "?")) query[1..] else query;
     return .{
-        .allocator = allocator,
+        .temp = std.ArrayList(u8).init(allocator),
         .inner = std.mem.splitScalar(u8, params, '&'),
-        .last = null,
     };
+}
+
+pub fn reset(self: *Query_Iterator) void {
+    self.temp.clearRetainingCapacity();
+    self.inner.index = 0;
 }
 
 pub fn deinit(self: *Query_Iterator) void {
