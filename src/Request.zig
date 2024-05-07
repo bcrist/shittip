@@ -226,8 +226,29 @@ const Respond_Err_Options = struct {
     err: ?anyerror = null,
     trace: ?*std.builtin.StackTrace = null,
 };
-pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
-    try self.ensure_response_not_started();
+pub fn respond_err(self: *Request, options: Respond_Err_Options) error{CloseConnection}!void {
+    if (self.response_state != .not_started) {
+        if (options.err) |err| {
+            log.err("C{}: [{} {} after response started] {s} {s}", .{
+                self.connection_number,
+                @intFromEnum(options.status),
+                err,
+                @tagName(self.method),
+                self.req.head.target,
+            });
+        } else {
+            log.err("C{}: [{} after response started] {s} {s}", .{
+                self.connection_number,
+                @intFromEnum(options.status),
+                @tagName(self.method),
+                self.req.head.target,
+            });
+        }
+        if (options.trace) |ert| {
+            std.debug.dumpStackTrace(ert.*);
+        }
+        return error.CloseConnection;
+    }
 
     if (!options.empty_content) {
         try self.set_response_header("content-type", content_type.html);
@@ -236,7 +257,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
     self.response_state = .sent;
 
     if (options.err) |e| {
-        log.info("C{}: [{} {}] {s} {s}", .{
+        log.warn("C{}: [{} {}] {s} {s}", .{
             self.connection_number,
             @intFromEnum(options.status),
             e,
@@ -313,7 +334,29 @@ pub fn format_err_response(options: Respond_Err_Options) ![]const u8 {
 }
 
 fn maybe_respond_err(self: *Request, options: Respond_Err_Options) error{CloseConnection}!void {
-    if (self.response_state != .not_started) return;
+    if (self.response_state != .not_started) {
+        if (options.err) |err| {
+            log.err("C{}: [{} {} after response started; suppressed] {s} {s}", .{
+                self.connection_number,
+                @intFromEnum(options.status),
+                err,
+                @tagName(self.method),
+                self.req.head.target,
+            });
+        } else {
+            log.err("C{}: [{} after response started; suppressed] {s} {s}", .{
+                self.connection_number,
+                @intFromEnum(options.status),
+                @tagName(self.method),
+                self.req.head.target,
+            });
+        }
+        if (options.trace) |ert| {
+            std.debug.dumpStackTrace(ert.*);
+        }
+        return;
+    }
+
     self.respond_err(options) catch |err| {
         if (err != error.CloseConnection) {
             log.err("C{}: Closing connection (failed to send response: {})", .{ self.connection_number, err });

@@ -113,6 +113,13 @@ fn render_value(value: anytype, writer: anytype) anyerror!void {
                 try render_value(value.*, writer);
             }
         },
+        .Array => |info| {
+            if (info.child == u8) {
+                try writer.print("{s}", .{ &value });
+            } else {
+                try writer.print("{any}", .{ &value });
+            }
+        },
         .Optional => {
             if (value) |v| try render_value(v, writer);
         },
