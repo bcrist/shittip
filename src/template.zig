@@ -2,6 +2,7 @@ const Token = union (enum) {
     text: []const u8,
     replacement: []const u8,
     open: []const u8,
+    other,
     close,
 };
 
@@ -21,6 +22,8 @@ const Iterator = struct {
 
             if (contents.len == 1 and contents[0] == '~') {
                 return .close;
+            } else if (contents.len == 1 and contents[0] == ':') {
+                return .other;
             } else if (std.mem.endsWith(u8, contents, "?")) {
                 return .{ .open = contents[0 .. contents.len - 1] };
             } else {
@@ -42,21 +45,33 @@ pub const Render_Options = struct {
 
 pub fn render(source: []const u8, data: anytype, writer: anytype, options: Render_Options) anyerror!void {
     var iter = Iterator { .remaining = source };
-    try render_block(&iter, data, writer, options);
+    try render_block(&iter, data, writer, options, false);
 }
 
-fn render_block(iter: *Iterator, data: anytype, writer: anytype, options: Render_Options) anyerror!void {
+fn render_block(iter: *Iterator, data: anytype, writer: anytype, options: Render_Options, initial_skip: bool) anyerror!void {
+    var skip = initial_skip;
     while (iter.next()) |token| switch (token) {
-        .text => |str| try writer.writeAll(str),
-        .replacement => |str| try render_replacement(str, data, writer, options),
-        .open => |str| try render_open_struct(iter, str, data, writer, options),
+        .text => |str| {
+            if (!skip) try writer.writeAll(str);
+        },
+        .replacement => |str| {
+            if (!skip) try render_replacement(str, data, writer, options);
+        },
+        .open => |str| {
+            if (skip) {
+                try skip_block(iter);
+            } else {
+                try render_open_struct(iter, str, data, writer, options);
+            }
+        },
+        .other => skip = !skip,
         .close => return,
     };
 }
 
 fn skip_block(iter: *Iterator) void {
     while (iter.next()) |token| switch (token) {
-        .text, .replacement => {},
+        .text, .replacement, .other => {},
         .open => skip_block(iter),
         .close => return,
     };
@@ -128,36 +143,32 @@ fn render_open_value(iter: *Iterator, value: anytype, writer: anytype, options: 
             if (info.size == .Slice) {
                 for (value) |v| {
                     var iter_copy = iter.*;
-                    try render_block(&iter_copy, v, writer, options);
+                    try render_block(&iter_copy, v, writer, options, false);
                 }
                 skip_block(iter);
             } else {
-                try render_open_value(value.*, writer);
+                try render_open_value(iter, value.*, writer, options);
             }
         },
         .Array => {
             for (value) |v| {
                 var iter_copy = iter.*;
-                try render_block(&iter_copy, v, writer, options);
+                try render_block(&iter_copy, v, writer, options, false);
             }
             skip_block(iter);
         },
         .Optional => {
             if (value) |v| {
-                try render_block(iter, v, writer, options);
+                try render_block(iter, v, writer, options, false);
             } else {
-                skip_block(iter);
+                try render_block(iter, {}, writer, options, true);
             }
         },
         .Bool => {
-            if (value) {
-                try render_block(iter, value, writer, options);
-            } else {
-                skip_block(iter);
-            }
+            try render_block(iter, value, writer, options !value);
         },
         else => {
-            try render_block(iter, value, writer, options);
+            try render_block(iter, value, writer, options, false);
         },
     }
 }
