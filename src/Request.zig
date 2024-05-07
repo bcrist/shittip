@@ -139,7 +139,7 @@ pub fn has_query_param(self: *Request, name: []const u8) !bool {
             return true;
         }
     }
-    return null;
+    return false;
 }
 
 pub fn ensure_response_not_started(self: *Request) !void {

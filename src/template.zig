@@ -233,7 +233,7 @@ fn render_open_value(iter: *Iterator, value: anytype, writer: anytype, options: 
             }
         },
         .Bool => {
-            try render_block(iter, value, writer, options !value);
+            try render_block(iter, value, writer, options, !value);
         },
         else => {
             try render_block(iter, value, writer, options, false);
