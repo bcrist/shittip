@@ -59,7 +59,7 @@ fn render_block(iter: *Iterator, data: anytype, writer: anytype, options: Render
         },
         .open => |str| {
             if (skip) {
-                try skip_block(iter);
+                skip_block(iter);
             } else {
                 try render_open_struct(iter, str, data, writer, options);
             }
