@@ -30,6 +30,7 @@ const Digest = [Hash.digest_length]u8;
 var out: std.fs.File.Writer = undefined;
 var dep_out: std.fs.File.Writer = undefined;
 var digest_map: std.StringHashMap(Digest) = undefined;
+var path_map: std.StringHashMap([]const u8) = undefined;
 var content_map: std.StringHashMap([]const u8) = undefined;
 var template_source_map: std.StringHashMap(zkittle.Source) = undefined;
 var content_writer: std.io.AnyWriter = undefined;
@@ -74,6 +75,9 @@ pub fn main() !void {
 
     digest_map = std.StringHashMap(Digest).init(gpa.allocator());
     defer digest_map.deinit();
+
+    path_map = std.StringHashMap([]const u8).init(gpa.allocator());
+    defer path_map.deinit();
 
     content_map = std.StringHashMap([]const u8).init(gpa.allocator());
     defer content_map.deinit();
@@ -146,44 +150,38 @@ pub fn main() !void {
     );
 }
 
-var temp_path_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+var temp_path: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+fn get_unix_path(path: []const u8) ![]const u8 {
+    const unix_path = try std.fmt.bufPrint(&temp_path, "{s}", .{ path });
+    std.mem.replaceScalar(u8, unix_path, '\\', '/');
+    return unix_path;
+}
+
 fn resource_path(path: []const u8) anyerror![]const u8 {
-    const ext = std.fs.path.extension(path);
+    const unix_path = try get_unix_path(path);
 
-    if (digest_map.get(path)) |digest| {
+    if (digest_map.get(unix_path)) |digest| {
         if (std.mem.eql(u8, &digest, &std.mem.zeroes(Digest))) {
-            log.err("Circular dependency detected involving {s}", .{ path });
+            log.err("Circular dependency detected involving {s}", .{ unix_path });
             return error.CircularDependency;
         }
+        return path_map.get(unix_path).?;
     } else {
-        try process_resource(path);
+        try process_resource(unix_path);
+        return path_map.get(try get_unix_path(path)).?;
     }
-    return std.fmt.bufPrint(&temp_path_buf, "/{}{s}", .{ std.fmt.fmtSliceHexLower(&digest_map.get(path).?), ext });
 }
 
-fn resource_content(path: []const u8) anyerror![]const u8 {
-    if (digest_map.get(path)) |digest| {
-        if (std.mem.eql(u8, &digest, &std.mem.zeroes(Digest))) {
-            log.err("Circular dependency detected involving {s}", .{ path });
-            return error.CircularDependency;
-        }
-    } else {
-        try process_resource(path);
-    }
-    return content_map.get(path).?;
-}
-
-fn process_resource(path: []const u8) anyerror!void {
-    const owned_path = try arena.allocator().dupe(u8, path);
-    std.mem.replaceScalar(u8, owned_path, '\\', '/');
-    const ext = std.fs.path.extension(path);
+fn process_resource(unix_path: []const u8) anyerror!void {
+    const owned_path = try arena.allocator().dupe(u8, unix_path);
 
     // prevent reference cycles from causing stack overflow:
     try digest_map.put(owned_path, std.mem.zeroes(Digest));
 
-    var the_resource_content = try current_dir.readFileAlloc(gpa.allocator(), path, 100_000_000);
+    var the_resource_content = try current_dir.readFileAlloc(gpa.allocator(), unix_path, 100_000_000);
     defer gpa.allocator().free(the_resource_content);
 
+    const ext = std.fs.path.extension(owned_path);
     if ((extensions.get(ext) orelse .source_path) == .static_template_extension) {
         var builder = std.ArrayList(u8).init(gpa.allocator());
         defer builder.deinit();
@@ -225,6 +223,7 @@ fn process_resource(path: []const u8) anyerror!void {
 
     try digest_map.put(owned_path, hash);
     try content_map.put(owned_path, try arena.allocator().dupe(u8, the_resource_content));
+    try path_map.put(owned_path, try std.fmt.allocPrint(arena.allocator(), "/{}{s}", .{ std.fmt.fmtSliceHexLower(&digest_map.get(owned_path).?), ext }));
 
     try dep_out.print("\"{}{s}{}\" ", .{
         std.zig.fmtEscapes(current_dir_path),
