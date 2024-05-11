@@ -71,8 +71,9 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
 
         fn strip_path_params(allocator: std.mem.Allocator, target: []const u8) ![]const u8 {
             const decoded = try percent_encoding.decode_alloc(allocator, target);
+            const extra_bytes = std.mem.count(u8, decoded, ':');
 
-            var list = try std.ArrayList(u8).initCapacity(allocator, decoded.len);
+            var list = try std.ArrayList(u8).initCapacity(allocator, decoded.len + extra_bytes);
             var iter = std.mem.splitScalar(u8, decoded, '/');
             var first = true;
             while (iter.next()) |part| {
