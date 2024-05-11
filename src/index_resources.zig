@@ -34,6 +34,7 @@ var path_map: std.StringHashMap([]const u8) = undefined;
 var content_map: std.StringHashMap([]const u8) = undefined;
 var template_source_map: std.StringHashMap(zkittle.Source) = undefined;
 var content_writer: std.io.AnyWriter = undefined;
+var templates_data_writer: std.io.AnyWriter = undefined;
 var templates_writer: std.io.AnyWriter = undefined;
 var extensions: std.StringHashMap(Arg_Type) = undefined;
 var current_dir: *std.fs.Dir = undefined;
@@ -67,6 +68,11 @@ pub fn main() !void {
     defer content_struct.deinit();
     const content_struct_writer = content_struct.writer();
     content_writer = content_struct_writer.any();
+
+    var templates_data_struct = std.ArrayList(u8).init(gpa.allocator());
+    defer templates_data_struct.deinit();
+    const templates_data_struct_writer = templates_data_struct.writer();
+    templates_data_writer = templates_data_struct_writer.any();
 
     var templates_struct = std.ArrayList(u8).init(gpa.allocator());
     defer templates_struct.deinit();
@@ -141,6 +147,12 @@ pub fn main() !void {
         \\};
         \\
         \\pub const templates = struct {
+        \\    const data = struct {
+        \\
+    );
+    try out.writeAll(templates_data_struct.items);
+    try out.writeAll(
+        \\    };
         \\
     );
     try out.writeAll(templates_struct.items);
@@ -271,11 +283,37 @@ fn process_template(path: []const u8) anyerror!zkittle.Source {
     try template_data.appendNTimes(0, start_of_opcodes - template_data.items.len);
     try template_data.appendSlice(std.mem.sliceAsBytes(template.opcodes));
     try template_data.appendSlice(template.literal_data);
+    const end = std.mem.alignForward(usize, template_data.items.len, @alignOf(usize));
+    try template_data.appendNTimes(0, end - template_data.items.len);
+    var stream = std.io.fixedBufferStream(template_data.items);
 
-    try templates_writer.print("    pub const {} = zkittle.init_static({}, \"{}\");\n", .{
+    try templates_data_writer.print("        pub const {} = [_]usize {{", .{
+        std.zig.fmtId(owned_path),
+    });
+
+    var i: usize = 8;
+    while (true) {
+        const endianness = @import("builtin").cpu.arch.endian();
+        const word: usize = stream.reader().readInt(usize, endianness) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => return err,
+        };
+        if (i == 8) {
+            i = 0;
+            try templates_data_writer.writeAll("\n            ");
+        } else {
+            i += 1;
+            try templates_data_writer.writeByte(' ');
+        }
+        try templates_data_writer.print("{},", .{ word });
+    }
+
+    try templates_data_writer.writeAll("\n        };\n");
+
+    try templates_writer.print("    pub const {} = zkittle.init_static({}, data.{});\n", .{
         std.zig.fmtId(owned_path),
         template.opcodes.len,
-        std.zig.fmtEscapes(template_data.items),
+        std.zig.fmtId(owned_path),
     });
 
     try dep_out.print("\"{}{s}{}\" ", .{
