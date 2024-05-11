@@ -94,6 +94,8 @@ pub fn main() !void {
 
     try out.print(
         \\const tempora = @import("tempora");
+        \\const zkittle = @import("zkittle");
+        \\
         \\pub const build_time = tempora.Date_Time.With_Offset.from_timestamp_s({}, null).dt;
         \\
         \\
