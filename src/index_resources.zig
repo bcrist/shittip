@@ -94,7 +94,7 @@ pub fn main() !void {
 
     template_parser = .{
         .gpa = gpa.allocator(),
-        .include_callback = process_template,
+        .include_callback = template_source,
         .resource_callback = resource_path,
     };
     defer template_parser.deinit();
@@ -209,7 +209,7 @@ fn process_resource(unix_path: []const u8) anyerror!void {
 
         var parser: zkittle.Parser = .{
             .gpa = gpa.allocator(),
-            .include_callback = process_template,
+            .include_callback = template_source,
             .resource_callback = resource_path,
         };
         defer parser.deinit();
@@ -258,7 +258,7 @@ fn process_resource(unix_path: []const u8) anyerror!void {
     });
 }
 
-fn process_template(path: []const u8) anyerror!zkittle.Source {
+fn template_source(path: []const u8) anyerror!zkittle.Source {
     const owned_path = try arena.allocator().dupe(u8, path);
     std.mem.replaceScalar(u8, owned_path, '\\', '/');
 
@@ -269,6 +269,12 @@ fn process_template(path: []const u8) anyerror!zkittle.Source {
 
     const source = try zkittle.Source.init_file(arena.allocator(), current_dir, path);
     try template_source_map.put(owned_path, source);
+    return source;
+}
+
+fn process_template(path: []const u8) anyerror!zkittle.Source {
+    const unix_path = try get_unix_path(path);
+    const source = try template_source(path);
 
     try template_parser.append(source);
 
@@ -278,7 +284,7 @@ fn process_template(path: []const u8) anyerror!zkittle.Source {
     const instruction_data = try template.get_static_instruction_data(gpa.allocator());
 
     try templates_data_writer.print("        pub const {} = [_]u64 {{", .{
-        std.zig.fmtId(owned_path),
+        std.zig.fmtId(unix_path),
     });
 
     var i: usize = 8;
@@ -296,15 +302,15 @@ fn process_template(path: []const u8) anyerror!zkittle.Source {
     try templates_data_writer.writeAll("\n        };\n");
 
     try templates_writer.print("    pub const {} = zkittle.init_static({}, &data.{}, data.literal_data);\n", .{
-        std.zig.fmtId(owned_path),
+        std.zig.fmtId(unix_path),
         template.opcodes.len,
-        std.zig.fmtId(owned_path),
+        std.zig.fmtId(unix_path),
     });
 
     try dep_out.print("\"{}{s}{}\" ", .{
         std.zig.fmtEscapes(current_dir_path),
         std.fs.path.sep_str,
-        std.zig.fmtEscapes(owned_path),
+        std.zig.fmtEscapes(unix_path),
     });
 
     return source;
