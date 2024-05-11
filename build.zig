@@ -35,6 +35,16 @@ pub fn build(b: *std.Build) void {
     index_resources_exe.root_module.addImport("tempora", ext.tempora);
     index_resources_exe.root_module.addImport("zkittle", ext.zkittle);
     b.installArtifact(index_resources_exe);
+
+    const index_resources_debug_exe = b.addExecutable(.{
+        .name = "index_resources_debug",
+        .root_source_file = .{ .path = "src/index_resources.zig" },
+        .target = b.host,
+        .optimize = .Debug,
+    });
+    index_resources_debug_exe.root_module.addImport("tempora", ext.tempora);
+    index_resources_debug_exe.root_module.addImport("zkittle", ext.zkittle);
+    b.installArtifact(index_resources_debug_exe);
 }
 
 pub const Resources_Options = struct {
@@ -45,10 +55,11 @@ pub const Resources_Options = struct {
     shittip: ?*std.Build.Dependency = null,
     tempora: ?*std.Build.Module = null,
     zkittle: ?*std.Build.Module = null,
+    debug: bool = false,
 };
 pub fn resources(b: *std.Build, options: Resources_Options) *std.Build.Module {
     const self = options.shittip orelse b.dependency("shittip", .{});
-    const exe = self.artifact("index_resources");
+    const exe = self.artifact(if (options.debug) "index_resources_debug" else "index_resources");
 
     var index_resources = b.addRunArtifact(exe);
 
