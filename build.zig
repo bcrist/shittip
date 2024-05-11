@@ -81,7 +81,7 @@ pub fn resources(b: *std.Build, options: Resources_Options) *std.Build.Module {
     }
 
     for (options.static_template_extensions) |ext| {
-        index_resources.addArgs(&.{ "-s", ext });
+        index_resources.addArgs(&.{ "-T", ext });
     }
 
     const res_module = b.createModule(.{ .root_source_file = res_source });

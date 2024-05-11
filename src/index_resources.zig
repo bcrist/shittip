@@ -20,7 +20,7 @@ const arg_map = std.ComptimeStringMap(Arg_Type, .{
     .{ "--ignore-ext", .ignored_extension },
     .{ "-t", .template_extension },
     .{ "--template-ext", .template_extension },
-    .{ "-s", .static_template_extension },
+    .{ "-T", .static_template_extension },
     .{ "--static-template-ext", .static_template_extension },
 });
 
