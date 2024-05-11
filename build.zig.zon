@@ -1,8 +1,12 @@
 .{
     .name = "shittip",
-    .version = "0.1.1",
+    .version = "0.2.0",
     .minimum_zig_version = "0.12.0",
-    .paths = .{""},
+    .paths = .{
+        "src",
+        "build.zig",
+        "build.zig.zon",
+    },
     .dependencies = .{
         .@"Zig-TempAllocator" = .{
             .url = "git+https://github.com/bcrist/Zig-TempAllocator#2401120308ba920ca95fdcf9a311c63341a7e04d",
@@ -15,6 +19,10 @@
         .dizzy = .{
             .url = "git+https://github.com/bcrist/dizzy#6ffd71accd09c0d45247205958ca281876919d50",
             .hash = "12205e1788edac39731a095a16ab12c52403e59a87b7b246810dbe12f00c6891b825",
+        },
+        .zkittle = .{
+            .url = "git+https://github.com/bcrist/zkittle#b5c439c91e1b4c14052edd9fd84e5718ba167231",
+            .hash = "122075f54ad84180672087bfee467b1c266edf3e95c92bf07d005e1a34737ebf2156",
         },
     },
 }

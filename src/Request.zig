@@ -49,6 +49,7 @@ pub fn handle(self: *Request) error{CloseConnection}!void {
             error.CloseConnection => return error.CloseConnection,
             error.SkipRemainingHandlers => break,
             error.BadRequest => try self.maybe_respond_err(.{ .status = .bad_request }),
+            error.Unauthorized => try self.maybe_respond_err(.{ .status = .unauthorized }),
             else => try self.maybe_respond_err(.{ .err = err, .trace = @errorReturnTrace() }),
         };
     }
@@ -394,7 +395,7 @@ fn maybe_respond_err(self: *Request, options: Respond_Err_Options) error{CloseCo
     };
 }
 
-pub fn render(self: *Request, comptime template_path: []const u8, data: anytype) anyerror!void {
+pub fn render(self: *Request, comptime template_path: []const u8, data: anytype, options: zkittle.Render_Options) anyerror!void {
     if (self.response_state == .not_started) {
         if (comptime content_type.lookup.get(std.fs.path.extension(template_path))) |ct| {
             _ = try self.maybe_add_response_header("content-type", ct);
@@ -402,11 +403,7 @@ pub fn render(self: *Request, comptime template_path: []const u8, data: anytype)
         _ = try self.maybe_add_response_header("cache-control", "no-cache");
     }
     const res = try self.response();
-    const source = routing.resource_content(template_path);
-    try template.render(source, data, res.writer(), .{
-        .resource_path = routing.resource_path_anyerror,
-        .resource_content = routing.resource_content_anyerror,
-    });
+    try @field(root.resources.templates, template_path).render(res.writer(), data, options);
 }
 
 const log = std.log.scoped(.http);
@@ -414,9 +411,10 @@ const log = std.log.scoped(.http);
 const Query_Iterator = @import("Query_Iterator.zig");
 const percent_encoding = @import("percent_encoding.zig");
 const content_type = @import("content_type.zig");
-const template = @import("template.zig");
+const zkittle = @import("zkittle");
 const routing = @import("routing.zig");
 const server = @import("server.zig");
 const util = @import("util.zig");
 const tempora = @import("tempora");
 const std = @import("std");
+const root = @import("root");

@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
         .Temp_Allocator = b.dependency("Zig-TempAllocator", .{}).module("Temp_Allocator"),
         .tempora = b.dependency("tempora", .{}).module("tempora"),
         .dizzy = b.dependency("dizzy", .{}).module("dizzy"),
+        .zkittle = b.dependency("zkittle", .{}).module("zkittle"),
     };
 
     const http = b.addModule("http", .{
@@ -13,6 +14,7 @@ pub fn build(b: *std.Build) void {
     http.addImport("Temp_Allocator", ext.Temp_Allocator);
     http.addImport("tempora", ext.tempora);
     http.addImport("dizzy", ext.dizzy);
+    http.addImport("zkittle", ext.zkittle);
 
     const tests = b.addTest(.{
         .root_source_file = .{ .path = "test.zig"},
@@ -31,16 +33,21 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
     });
     index_resources_exe.root_module.addImport("tempora", ext.tempora);
+    index_resources_exe.root_module.addImport("zkittle", ext.zkittle);
     b.installArtifact(index_resources_exe);
 }
 
 pub const Resources_Options = struct {
     root_path: std.Build.LazyPath,
     ignored_extensions: []const[]const u8 = &.{ ".zig" },
-    template_extensions: []const[]const u8 = &.{ ".css" },
+    template_extensions: []const[]const u8 = &.{ ".htm", ".html", ".zk" },
+    static_template_extensions: []const[]const u8 = &.{ ".css", ".szk" },
+    shittip: ?*std.Build.Dependency = null,
+    tempora: ?*std.Build.Module = null,
+    zkittle: ?*std.Build.Module = null,
 };
 pub fn resources(b: *std.Build, options: Resources_Options) *std.Build.Module {
-    const self = b.dependency("shittip", .{});
+    const self = options.shittip orelse b.dependency("shittip", .{});
     const exe = self.artifact("index_resources");
 
     var index_resources = b.addRunArtifact(exe);
@@ -62,8 +69,13 @@ pub fn resources(b: *std.Build, options: Resources_Options) *std.Build.Module {
         index_resources.addArgs(&.{ "-t", ext });
     }
 
+    for (options.static_template_extensions) |ext| {
+        index_resources.addArgs(&.{ "-s", ext });
+    }
+
     const res_module = b.createModule(.{ .root_source_file = res_source });
-    res_module.addImport("tempora", b.dependency("tempora", .{}).module("tempora"));
+    res_module.addImport("tempora", options.tempora orelse b.dependency("tempora", .{}).module("tempora"));
+    res_module.addImport("zkittle", options.zkittle orelse b.dependency("zkittle", .{}).module("zkittle"));
 
     return res_module;
 }

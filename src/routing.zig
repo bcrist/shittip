@@ -129,27 +129,6 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
     }.route);
 }
 
-pub fn generic(comptime source_path: []const u8) Alloc_Handler {
-    const extension = comptime std.fs.path.extension(source_path);
-    const source = resource_content(source_path);
-    const content = comptime blk: {
-        @setEvalBranchQuota(100_000);
-        var buf: [source.len * 2]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&buf);
-        try template.render(source, {}, stream.writer(), .{
-            .resource_path = resource_path_anyerror,
-            .resource_content = resource_content_anyerror,
-        });
-        break :blk stream.getWritten()[0..].*;
-    };
-    return static_internal(.{
-        .content = &content,
-        .content_type = content_type.lookup.get(extension),
-        .cache_control = "must-revalidate, max-age=600, public",
-        .last_modified_utc = root.resources.build_time,
-    });
-}
-
 pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Handler } {
     const extension = std.fs.path.extension(source_path);
     return .{
@@ -164,33 +143,9 @@ pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Han
     };
 }
 
-pub fn resource_path_anyerror(source_path: []const u8) anyerror![]const u8 {
-    // TODO fix templater to allow the return type to have no error
-    inline for (@typeInfo(root.resources).Struct.decls) |decl| {
-        if (@typeInfo(@TypeOf(@field(root.resources, decl.name))) == .Pointer) {
-            if (std.mem.eql(u8, source_path, decl.name)) {
-                return comptime "/" ++ @field(root.resources, decl.name) ++ std.fs.path.extension(decl.name);
-            }
-        }
-    }
-    return error.InvalidResource;
-}
-
 pub fn resource_path(comptime source_path: []const u8) []const u8 {
     const extension = std.fs.path.extension(source_path);
     return comptime "/" ++ @field(root.resources, source_path) ++ extension;
-}
-
-pub fn resource_content_anyerror(source_path: []const u8) anyerror![]const u8 {
-    // TODO fix templater to allow the return type to have no error
-    inline for (@typeInfo(root.resources.content).Struct.decls) |decl| {
-        if (@typeInfo(@TypeOf(@field(root.resources.content, decl.name))) == .Pointer) {
-            if (std.mem.eql(u8, source_path, decl.name)) {
-                return @field(root.resources.content, decl.name);
-            }
-        }
-    }
-    return error.InvalidResource;
 }
 
 pub fn resource_content(comptime source_path: []const u8) []const u8 {
@@ -305,7 +260,6 @@ pub fn shutdown(req: *Request, pool: *Pool) !void {
 
 const log = std.log.scoped(.http);
 
-const template = @import("template.zig");
 const util = @import("util.zig");
 const content_type = @import("content_type.zig");
 const percent_encoding = @import("percent_encoding.zig");

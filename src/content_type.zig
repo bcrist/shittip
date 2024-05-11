@@ -18,6 +18,7 @@ pub const lookup = std.ComptimeStringMap([]const u8, .{
     .{ ".txt", text },
     .{ ".htm", html },
     .{ ".html", html },
+    .{ ".zk", html },
     .{ ".css", css },
     .{ ".js", js },
     .{ ".json", json },
