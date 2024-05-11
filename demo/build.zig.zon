@@ -8,8 +8,12 @@
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://github.com/bcrist/tempora#ee0719f2acdc013c5f9b22df9324fb8a7af93674",
-            .hash = "122051900b4aa8c07567f549615aa7504d7d6a5f8f4cf3dbbf8bd3af5585aa2e94cb",
+            .url = "git+https://github.com/bcrist/tempora#a0eb5f4b88954d0d0ff6abe2900e4010d9cd44e1",
+            .hash = "12209d13ab40c25a80c4d96a2d8addc9272c3df4c42d13199d51982e8d0fc71ef4c0",
+        },
+        .zkittle = .{
+            .url = "git+https://github.com/bcrist/zkittle#daff2ce7f7c4ea7bf43e3c31daf838d961d7db7c",
+            .hash = "122056a0b20724d228a5bf86410586b212281d9281336f44be57b60ece2336e008b7",
         },
     },
 }

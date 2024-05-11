@@ -7,13 +7,13 @@ pub fn main() !void {
 
     const r = http.routing;
     try server.router("", .{
-        .{ "/", r.generic("index.html") },
+        .{ "/", r.module(Injector, index) },
         .{ "/something/**" },
         r.resource("style.css"),
     });
 
     try server.router("/something/**", .{
-        .{ "shutdown", r.method(.GET), r.shutdown, r.generic("shutdown.html") },
+        .{ "shutdown", r.method(.GET), r.shutdown },
         .{ "hello", r.module(Injector, hello) },
         .{ "hello/id:*", r.module(Injector, hello) },
     });
@@ -32,6 +32,12 @@ const hello = struct {
     pub fn post(req: *http.Request) !void {
         std.log.info("Hello Post!", .{});
         try req.respond("Hello Post!");
+    }
+};
+
+const index = struct {
+    pub fn get(req: *http.Request) !void {
+        try req.render("index.html", {}, .{});
     }
 };
 

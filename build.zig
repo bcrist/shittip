@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) void {
 }
 
 pub const Resources_Options = struct {
-    root_path: std.Build.LazyPath,
+    paths: []const std.Build.LazyPath,
     ignored_extensions: []const[]const u8 = &.{ ".zig" },
     template_extensions: []const[]const u8 = &.{ ".htm", ".html", ".zk" },
     static_template_extensions: []const[]const u8 = &.{ ".css", ".szk" },
@@ -63,8 +63,10 @@ pub fn resources(b: *std.Build, options: Resources_Options) *std.Build.Module {
 
     var index_resources = b.addRunArtifact(exe);
 
-    index_resources.addArg("-s");
-    index_resources.addDirectoryArg(options.root_path);
+    for (options.paths) |path| {
+        index_resources.addArg("-s");
+        index_resources.addDirectoryArg(path);
+    }
 
     index_resources.addArg("-o");
     const res_source = index_resources.addOutputFileArg("res.zig");

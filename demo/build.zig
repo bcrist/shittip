@@ -10,7 +10,9 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("http", b.dependency("shittip", .{}).module("http"));
     exe.root_module.addImport("resources", shittip.resources(b, .{
-        .root_path = .{ .path = "resources" },
+        .paths = &.{
+            .{ .path = "resources" },
+        },
     }));
     b.installArtifact(exe);
 
