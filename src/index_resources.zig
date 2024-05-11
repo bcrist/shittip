@@ -310,7 +310,7 @@ fn process_template(path: []const u8) anyerror!zkittle.Source {
 
     try templates_data_writer.writeAll("\n        };\n");
 
-    try templates_writer.print("    pub const {} = zkittle.init_static({}, data.{});\n", .{
+    try templates_writer.print("    pub const {} = zkittle.init_static({}, &data.{});\n", .{
         std.zig.fmtId(owned_path),
         template.opcodes.len,
         std.zig.fmtId(owned_path),
