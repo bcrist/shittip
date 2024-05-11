@@ -160,7 +160,7 @@ pub fn main() !void {
     );
     try out.writeAll(templates_data_struct.items);
     try out.print(
-        \\        const literal_data = \"{}\";
+        \\        const literal_data = "{}";
         \\    }};
         \\
         , .{ std.zig.fmtEscapes(template_parser.literal_data.items) });
