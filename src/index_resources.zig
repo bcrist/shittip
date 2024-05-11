@@ -237,15 +237,16 @@ fn process_resource(path: []const u8) anyerror!void {
 }
 
 fn process_template(path: []const u8) anyerror!zkittle.Source {
-    if (template_source_map.get(path)) |source| {
-        return source;
-    }
-
     const owned_path = try arena.allocator().dupe(u8, path);
     std.mem.replaceScalar(u8, owned_path, '\\', '/');
 
+    if (template_source_map.get(owned_path)) |source| {
+        arena.allocator().free(owned_path);
+        return source;
+    }
+
     const source = try zkittle.Source.init_file(arena.allocator(), current_dir, path);
-    try template_source_map.put(path, source);
+    try template_source_map.put(owned_path, source);
 
     var parser: zkittle.Parser = .{
         .gpa = gpa.allocator(),
