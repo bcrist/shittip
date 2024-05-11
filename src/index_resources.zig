@@ -109,7 +109,7 @@ pub fn main() !void {
         current_dir = &dir;
         current_dir_path = search_path;
 
-        var walker = try dir.walk(std.heap.page_allocator);
+        var walker = try dir.walk(gpa.allocator());
         defer walker.deinit();
 
         while (try walker.next()) |entry| {
