@@ -39,6 +39,7 @@ var templates_writer: std.io.AnyWriter = undefined;
 var extensions: std.StringHashMap(Arg_Type) = undefined;
 var current_dir: *std.fs.Dir = undefined;
 var current_dir_path: []const u8 = undefined;
+var template_parser: zkittle.Parser = undefined;
 
 pub fn main() !void {
     var search_paths = std.ArrayList([]const u8).init(gpa.allocator());
@@ -90,6 +91,13 @@ pub fn main() !void {
 
     template_source_map = std.StringHashMap(zkittle.Source).init(gpa.allocator());
     defer template_source_map.deinit();
+
+    template_parser = .{
+        .gpa = gpa.allocator(),
+        .include_callback = process_template,
+        .resource_callback = resource_path,
+    };
+    defer template_parser.deinit();
 
     const f = try std.fs.cwd().createFile(out_path, .{});
     defer f.close();
@@ -151,10 +159,11 @@ pub fn main() !void {
         \\
     );
     try out.writeAll(templates_data_struct.items);
-    try out.writeAll(
-        \\    };
+    try out.print(
+        \\        const literal_data = \"{}\";
+        \\    }};
         \\
-    );
+        , .{ std.zig.fmtEscapes(template_parser.literal_data.items) });
     try out.writeAll(templates_struct.items);
     try out.writeAll(
         \\};
@@ -210,7 +219,7 @@ fn process_resource(unix_path: []const u8) anyerror!void {
 
         try parser.append(source);
 
-        var template = try parser.finish(gpa.allocator());
+        var template = try parser.finish(gpa.allocator(), true);
         defer template.deinit(gpa.allocator());
 
         var writer = builder.writer();
@@ -261,43 +270,19 @@ fn process_template(path: []const u8) anyerror!zkittle.Source {
     const source = try zkittle.Source.init_file(arena.allocator(), current_dir, path);
     try template_source_map.put(owned_path, source);
 
-    var parser: zkittle.Parser = .{
-        .gpa = gpa.allocator(),
-        .include_callback = process_template,
-        .resource_callback = resource_path,
-    };
-    defer parser.deinit();
+    try template_parser.append(source);
 
-    try parser.append(source);
-
-    var template = try parser.finish(gpa.allocator());
+    var template = try template_parser.finish(gpa.allocator(), false);
     defer template.deinit(gpa.allocator());
 
-    var template_data = std.ArrayList(u8).init(gpa.allocator());
-    defer template_data.deinit();
+    const instruction_data = try template.get_static_instruction_data(gpa.allocator());
 
-    const operands: []const zkittle.Operands = template.operands[0..template.opcodes.len];
-    try template_data.appendSlice(std.mem.sliceAsBytes(operands));
-
-    const start_of_opcodes = std.mem.alignForward(usize, template_data.items.len, @alignOf(zkittle.Opcode));
-    try template_data.appendNTimes(0, start_of_opcodes - template_data.items.len);
-    try template_data.appendSlice(std.mem.sliceAsBytes(template.opcodes));
-    try template_data.appendSlice(template.literal_data);
-    const end = std.mem.alignForward(usize, template_data.items.len, @alignOf(usize));
-    try template_data.appendNTimes(0, end - template_data.items.len);
-    var stream = std.io.fixedBufferStream(template_data.items);
-
-    try templates_data_writer.print("        pub const {} = [_]usize {{", .{
+    try templates_data_writer.print("        pub const {} = [_]u64 {{", .{
         std.zig.fmtId(owned_path),
     });
 
     var i: usize = 8;
-    while (true) {
-        const endianness = @import("builtin").cpu.arch.endian();
-        const word: usize = stream.reader().readInt(usize, endianness) catch |err| switch (err) {
-            error.EndOfStream => break,
-            else => return err,
-        };
+    for (instruction_data) |word| {
         if (i == 8) {
             i = 0;
             try templates_data_writer.writeAll("\n            ");
@@ -310,7 +295,7 @@ fn process_template(path: []const u8) anyerror!zkittle.Source {
 
     try templates_data_writer.writeAll("\n        };\n");
 
-    try templates_writer.print("    pub const {} = zkittle.init_static({}, &data.{});\n", .{
+    try templates_writer.print("    pub const {} = zkittle.init_static({}, &data.{}, data.literal_data);\n", .{
         std.zig.fmtId(owned_path),
         template.opcodes.len,
         std.zig.fmtId(owned_path),
