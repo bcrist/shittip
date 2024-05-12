@@ -27,25 +27,51 @@ const arg_map = std.ComptimeStringMap(Arg_Type, .{
 const Hash = std.crypto.hash.sha2.Sha256;
 const Digest = [Hash.digest_length]u8;
 
-var out: std.fs.File.Writer = undefined;
-var dep_out: std.fs.File.Writer = undefined;
-var digest_map: std.StringHashMap(Digest) = undefined;
-var path_map: std.StringHashMap([]const u8) = undefined;
-var content_map: std.StringHashMap([]const u8) = undefined;
-var template_source_map: std.StringHashMap(zkittle.Source) = undefined;
-var content_writer: std.io.AnyWriter = undefined;
-var templates_data_writer: std.io.AnyWriter = undefined;
-var templates_writer: std.io.AnyWriter = undefined;
-var extensions: std.StringHashMap(Arg_Type) = undefined;
-var current_dir: *std.fs.Dir = undefined;
-var current_dir_path: []const u8 = undefined;
+const Resource_File = struct {
+    realpath: []const u8,
+    static_template: bool,
+    digest: ?Digest = null,
+    content: ?[]const u8 = null,
+    http_path: ?[]const u8 = null,
+};
+
+const Template_File = struct {
+    source: zkittle.Source,
+    instructions: ?usize = null,
+    instruction_data: []const usize = &.{},
+};
+
+var resource_files: std.StringHashMap(Resource_File) = undefined;
+var template_files: std.StringHashMap(Template_File) = undefined;
 var template_parser: zkittle.Parser = undefined;
 
 pub fn main() !void {
+    resource_files = std.StringHashMap(Resource_File).init(gpa.allocator());
+    template_files = std.StringHashMap(Template_File).init(gpa.allocator());
+    defer resource_files.deinit();
+    defer template_files.deinit();
+
+    const out_path = try parse_args_and_source_paths();
+
+    try process_resource_files();
+
+    template_parser = .{
+        .gpa = gpa.allocator(),
+        .include_callback = template_source,
+        .resource_callback = resource_path,
+    };
+    defer template_parser.deinit();
+
+    try process_template_files();
+
+    try write_output(out_path);
+}
+
+fn parse_args_and_source_paths() ![]const u8 {
     var search_paths = std.ArrayList([]const u8).init(gpa.allocator());
     defer search_paths.deinit();
 
-    extensions = std.StringHashMap(Arg_Type).init(gpa.allocator());
+    var extensions = std.StringHashMap(Arg_Type).init(gpa.allocator());
     defer extensions.deinit();
 
     var arg_iter = try std.process.argsWithAllocator(gpa.allocator());
@@ -56,59 +82,146 @@ pub fn main() !void {
 
     while (arg_iter.next()) |arg| {
         if (arg_map.get(arg)) |arg_type| switch (arg_type) {
-            .source_path => try search_paths.append(arg_iter.next() orelse return error.ExpectedSourcePath),
-            .output_file => out_path = arg_iter.next() orelse return error.ExpectedOutputFile,
-            .dependency_file => dep_path = arg_iter.next() orelse return error.ExpectedDependencyFile,
+            .source_path => {
+                const path = try arena.allocator().dupe(u8, arg_iter.next() orelse return error.ExpectedSourcePath);
+                try search_paths.append(path);
+            },
+            .output_file => {
+                out_path = try arena.allocator().dupe(u8, arg_iter.next() orelse return error.ExpectedOutputFile);
+            },
+            .dependency_file => {
+                dep_path = try arena.allocator().dupe(u8, arg_iter.next() orelse return error.ExpectedDependencyFile);
+            },
             .ignored_extension, .template_extension, .static_template_extension => {
-                try extensions.put(arg_iter.next() orelse return error.ExpectedExtension, arg_type);
+                const ext = try arena.allocator().dupe(u8, arg_iter.next() orelse return error.ExpectedExtension);
+                try extensions.put(ext, arg_type);
             },
         };
     }
 
-    var content_struct = std.ArrayList(u8).init(gpa.allocator());
-    defer content_struct.deinit();
-    const content_struct_writer = content_struct.writer();
-    content_writer = content_struct_writer.any();
-
-    var templates_data_struct = std.ArrayList(u8).init(gpa.allocator());
-    defer templates_data_struct.deinit();
-    const templates_data_struct_writer = templates_data_struct.writer();
-    templates_data_writer = templates_data_struct_writer.any();
-
-    var templates_struct = std.ArrayList(u8).init(gpa.allocator());
-    defer templates_struct.deinit();
-    const templates_struct_writer = templates_struct.writer();
-    templates_writer = templates_struct_writer.any();
-
-    digest_map = std.StringHashMap(Digest).init(gpa.allocator());
-    defer digest_map.deinit();
-
-    path_map = std.StringHashMap([]const u8).init(gpa.allocator());
-    defer path_map.deinit();
-
-    content_map = std.StringHashMap([]const u8).init(gpa.allocator());
-    defer content_map.deinit();
-
-    template_source_map = std.StringHashMap(zkittle.Source).init(gpa.allocator());
-    defer template_source_map.deinit();
-
-    template_parser = .{
-        .gpa = gpa.allocator(),
-        .include_callback = template_source,
-        .resource_callback = resource_path,
-    };
-    defer template_parser.deinit();
-
-    const f = try std.fs.cwd().createFile(out_path, .{});
-    defer f.close();
-
     const df = try std.fs.cwd().createFile(dep_path, .{});
     defer df.close();
-
-    out = f.writer();
-    dep_out = df.writer();
-
+    var dep_out = df.writer();
     try dep_out.print("\"{}\": ", .{ std.zig.fmtEscapes(out_path) });
+
+    for (search_paths.items) |search_path| {
+        var base = search_path;
+        if (std.mem.endsWith(u8, search_path, std.fs.path.sep_str)) {
+            base = search_path[0 .. search_path.len - 1];
+        }
+
+        var dir = try std.fs.cwd().openDir(search_path, .{ .iterate = true });
+        defer dir.close();
+
+        var walker = try dir.walk(gpa.allocator());
+        defer walker.deinit();
+
+        while (try walker.next()) |entry| {
+            if (entry.kind == .file or entry.kind == .sym_link) {
+                const ext = extensions.get(std.fs.path.extension(entry.path)) orelse .source_path;
+                switch (ext) {
+                    .template_extension => {
+                        const unix_path = try std.fmt.allocPrint(arena.allocator(), "{s}", .{ entry.path });
+                        std.mem.replaceScalar(u8, unix_path, '\\', '/');
+                        const source = try zkittle.Source.init_file(arena.allocator(), &dir, entry.path);
+                        try template_files.putNoClobber(unix_path, .{
+                            .source = source,
+                        });
+                    },
+                    .static_template_extension, .source_path => {
+                        const unix_path = try std.fmt.allocPrint(arena.allocator(), "{s}", .{ entry.path });
+                        std.mem.replaceScalar(u8, unix_path, '\\', '/');
+                        try resource_files.putNoClobber(unix_path, .{
+                            .realpath = try dir.realpathAlloc(arena.allocator(), entry.path),
+                            .static_template = ext == .static_template_extension,
+                        });
+
+                        
+                    },
+                    else => continue,
+                }
+                try dep_out.print("\"{}{s}{}\" ", .{
+                    std.zig.fmtEscapes(base),
+                    std.fs.path.sep_str,
+                    std.zig.fmtEscapes(entry.path),
+                });
+            }
+        }
+    }
+
+    return out_path;
+}
+
+fn process_resource_files() !void {
+    var iter = resource_files.iterator();
+    while (iter.next()) |entry| {
+        const path = entry.key_ptr.*;
+        const info = entry.value_ptr;
+
+        if (info.digest == null) {
+            try process_resource(path, info);
+        }
+    }
+}
+
+fn process_resource(path: []const u8, info: *Resource_File) anyerror!void {
+    // prevent reference cycles from causing stack overflow:
+    info.digest = std.mem.zeroes(Digest);
+
+    var content = try std.fs.cwd().readFileAlloc(gpa.allocator(), info.realpath, 100_000_000);
+    defer gpa.allocator().free(content);
+
+    const ext = std.fs.path.extension(path);
+    if (info.static_template) {
+        var builder = std.ArrayList(u8).init(gpa.allocator());
+        defer builder.deinit();
+
+        var parser: zkittle.Parser = .{
+            .gpa = gpa.allocator(),
+            .include_callback = template_source,
+            .resource_callback = resource_path,
+        };
+        defer parser.deinit();
+
+        var source = try zkittle.Source.init_buf(gpa.allocator(), path, content);
+        defer source.deinit(gpa.allocator());
+
+        try parser.append(source);
+
+        var template = try parser.finish(gpa.allocator(), true);
+        defer template.deinit(gpa.allocator());
+
+        var writer = builder.writer();
+        try template.render(writer.any(), {}, .{ .escape_fn = zkittle.escape_none });
+
+        gpa.allocator().free(content);
+        content = try builder.toOwnedSlice();
+    }
+
+    var hash: Digest = undefined;
+    Hash.hash(content, &hash, .{});
+
+    info.digest = hash;
+    info.content = try arena.allocator().dupe(u8, content);
+    info.http_path = try std.fmt.allocPrint(arena.allocator(), "/{}{s}", .{ std.fmt.fmtSliceHexLower(&hash), ext });
+}
+
+fn process_template_files() !void {
+    var iter = template_files.valueIterator();
+    while (iter.next()) |info| {
+        try template_parser.append(info.source);
+        var template = try template_parser.finish(gpa.allocator(), false);
+        defer template.deinit(gpa.allocator());
+
+        info.instruction_data = try template.get_static_instruction_data(arena.allocator());
+        info.instructions = template.opcodes.len;
+    }
+}
+
+fn write_output(out_path: []const u8) !void {
+    const f = try std.fs.cwd().createFile(out_path, .{});
+    defer f.close();
+    var out = f.writer();
 
     try out.print(
         \\const tempora = @import("tempora");
@@ -121,26 +234,16 @@ pub fn main() !void {
             std.time.timestamp(),
         });
 
-    for (search_paths.items) |search_path| {
-        var dir = try std.fs.cwd().openDir(search_path, .{ .iterate = true });
-        defer dir.close();
-        current_dir = &dir;
-        current_dir_path = search_path;
-
-        var walker = try dir.walk(gpa.allocator());
-        defer walker.deinit();
-
-        while (try walker.next()) |entry| {
-            if (entry.kind == .file or entry.kind == .sym_link) {
-                if (extensions.get(std.fs.path.extension(entry.path))) |kind| switch (kind) {
-                    .ignored_extension => continue,
-                    .template_extension => {
-                        _ = try process_template(entry.path);
-                        continue;
-                    },
-                    else => {},
-                };
-                _ = try resource_path(entry.path);
+    {
+        var iter = resource_files.iterator();
+        while (iter.next()) |entry| {
+            const path = entry.key_ptr.*;
+            const info = entry.value_ptr.*;
+            if (info.digest) |digest| {
+                try out.print("pub const {} = \"{}\";\n", .{
+                    std.zig.fmtId(path),
+                    std.fmt.fmtSliceHexLower(&digest),
+                });
             }
         }
     }
@@ -150,7 +253,21 @@ pub fn main() !void {
         \\pub const content = struct {
         \\
     );
-    try out.writeAll(content_struct.items);
+    
+    {
+        var iter = resource_files.iterator();
+        while (iter.next()) |entry| {
+            const path = entry.key_ptr.*;
+            const info = entry.value_ptr.*;
+            if (info.content) |content| {
+                try out.print("    pub const {} = \"{}\";\n", .{
+                    std.zig.fmtId(path),
+                    std.zig.fmtEscapes(content),
+                });
+            }
+        }
+    }
+
     try out.writeAll(
         \\};
         \\
@@ -158,162 +275,91 @@ pub fn main() !void {
         \\    const data = struct {
         \\
     );
-    try out.writeAll(templates_data_struct.items);
+    
+    {
+        var iter = template_files.iterator();
+        while (iter.next()) |entry| {
+            const path = entry.key_ptr.*;
+            const info = entry.value_ptr.*;
+
+            if (info.instructions) |_| {
+                try out.print("        pub const {} = [_]u64 {{", .{
+                    std.zig.fmtId(path),
+                });
+
+                var i: usize = 8;
+                for (info.instruction_data) |word| {
+                    if (i == 8) {
+                        i = 0;
+                        try out.writeAll("\n            ");
+                    } else {
+                        i += 1;
+                        try out.writeByte(' ');
+                    }
+                    try out.print("{},", .{ word });
+                }
+
+                try out.writeAll("\n        };\n");
+            }
+        }
+    }
+
     try out.print(
         \\        const literal_data = "{}";
         \\    }};
         \\
         , .{ std.zig.fmtEscapes(template_parser.literal_data.items) });
-    try out.writeAll(templates_struct.items);
+
+    {
+        var iter = template_files.iterator();
+        while (iter.next()) |entry| {
+            const path = entry.key_ptr.*;
+            const info = entry.value_ptr.*;
+            if (info.instructions) |instruction_count| {
+                try out.print("    pub const {} = zkittle.init_static({}, &data.{}, data.literal_data);\n", .{
+                    std.zig.fmtId(path),
+                    instruction_count,
+                    std.zig.fmtId(path),
+                });
+            }
+        }
+    }
+
     try out.writeAll(
         \\};
         \\
     );
 }
 
-var temp_path: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-fn get_unix_path(path: []const u8) ![]const u8 {
-    const unix_path = try std.fmt.bufPrint(&temp_path, "{s}", .{ path });
+fn resource_path(raw_path: []const u8) anyerror![]const u8 {
+    var temp_path_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    const unix_path = try std.fmt.bufPrint(&temp_path_buf, "{s}", .{ raw_path });
     std.mem.replaceScalar(u8, unix_path, '\\', '/');
-    return unix_path;
-}
 
-fn resource_path(path: []const u8) anyerror![]const u8 {
-    const unix_path = try get_unix_path(path);
+    const entry = resource_files.getEntry(unix_path) orelse return error.FileNotFound;
+    const path = entry.key_ptr.*;
+    const info = entry.value_ptr;
 
-    if (digest_map.get(unix_path)) |digest| {
-        if (std.mem.eql(u8, &digest, &std.mem.zeroes(Digest))) {
-            log.err("Circular dependency detected involving {s}", .{ unix_path });
-            return error.CircularDependency;
-        }
-        return path_map.get(unix_path).?;
-    } else {
-        try process_resource(unix_path);
-        return path_map.get(try get_unix_path(path)).?;
-    }
-}
-
-fn process_resource(unix_path: []const u8) anyerror!void {
-    const owned_path = try arena.allocator().dupe(u8, unix_path);
-
-    // prevent reference cycles from causing stack overflow:
-    try digest_map.put(owned_path, std.mem.zeroes(Digest));
-
-    var the_resource_content = try current_dir.readFileAlloc(gpa.allocator(), unix_path, 100_000_000);
-    defer gpa.allocator().free(the_resource_content);
-
-    const ext = std.fs.path.extension(owned_path);
-    if ((extensions.get(ext) orelse .source_path) == .static_template_extension) {
-        var builder = std.ArrayList(u8).init(gpa.allocator());
-        defer builder.deinit();
-
-        var parser: zkittle.Parser = .{
-            .gpa = gpa.allocator(),
-            .include_callback = template_source,
-            .resource_callback = resource_path,
-        };
-        defer parser.deinit();
-
-        var source = try zkittle.Source.init_buf(gpa.allocator(), owned_path, the_resource_content);
-        defer source.deinit(gpa.allocator());
-
-        try parser.append(source);
-
-        var template = try parser.finish(gpa.allocator(), true);
-        defer template.deinit(gpa.allocator());
-
-        var writer = builder.writer();
-        try template.render(writer.any(), {}, .{ .escape_fn = zkittle.escape_none });
-
-        gpa.allocator().free(the_resource_content);
-        the_resource_content = try builder.toOwnedSlice();
-
-        try content_writer.print("    pub const {} = \"{}\";\n", .{
-            std.zig.fmtId(owned_path),
-            std.zig.fmtEscapes(the_resource_content),
-        });
-    } else {
-        try content_writer.print("    pub const {} = \"{}\";\n", .{
-            std.zig.fmtId(owned_path),
-            std.zig.fmtEscapes(the_resource_content),
-        });
+    if (info.http_path) |http_path| {
+        return http_path;
     }
 
-    var hash: Digest = undefined;
-    Hash.hash(the_resource_content, &hash, .{});
-
-    try digest_map.put(owned_path, hash);
-    try content_map.put(owned_path, try arena.allocator().dupe(u8, the_resource_content));
-    try path_map.put(owned_path, try std.fmt.allocPrint(arena.allocator(), "/{}{s}", .{ std.fmt.fmtSliceHexLower(&digest_map.get(owned_path).?), ext }));
-
-    try dep_out.print("\"{}{s}{}\" ", .{
-        std.zig.fmtEscapes(current_dir_path),
-        std.fs.path.sep_str,
-        std.zig.fmtEscapes(owned_path),
-    });
-
-    try out.print("pub const {} = \"{}\";\n", .{
-        std.zig.fmtId(owned_path),
-        std.fmt.fmtSliceHexLower(&hash),
-    });
-}
-
-fn template_source(path: []const u8) anyerror!zkittle.Source {
-    const owned_path = try arena.allocator().dupe(u8, path);
-    std.mem.replaceScalar(u8, owned_path, '\\', '/');
-
-    if (template_source_map.get(owned_path)) |source| {
-        arena.allocator().free(owned_path);
-        return source;
+    if (info.digest) |_| {
+        log.err("Circular dependency detected involving {s}", .{ path });
+        return error.CircularDependency;
     }
 
-    const source = try zkittle.Source.init_file(arena.allocator(), current_dir, path);
-    try template_source_map.put(owned_path, source);
-    return source;
+    try process_resource(path, info);
+    return info.http_path.?;
 }
 
-fn process_template(path: []const u8) anyerror!zkittle.Source {
-    const unix_path = try get_unix_path(path);
-    const source = try template_source(path);
+fn template_source(raw_path: []const u8) anyerror!zkittle.Source {
+    var temp_path_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    const unix_path = try std.fmt.bufPrint(&temp_path_buf, "{s}", .{ raw_path });
+    std.mem.replaceScalar(u8, unix_path, '\\', '/');
 
-    try template_parser.append(source);
-
-    var template = try template_parser.finish(gpa.allocator(), false);
-    defer template.deinit(gpa.allocator());
-
-    const instruction_data = try template.get_static_instruction_data(gpa.allocator());
-
-    try templates_data_writer.print("        pub const {} = [_]u64 {{", .{
-        std.zig.fmtId(unix_path),
-    });
-
-    var i: usize = 8;
-    for (instruction_data) |word| {
-        if (i == 8) {
-            i = 0;
-            try templates_data_writer.writeAll("\n            ");
-        } else {
-            i += 1;
-            try templates_data_writer.writeByte(' ');
-        }
-        try templates_data_writer.print("{},", .{ word });
-    }
-
-    try templates_data_writer.writeAll("\n        };\n");
-
-    try templates_writer.print("    pub const {} = zkittle.init_static({}, &data.{}, data.literal_data);\n", .{
-        std.zig.fmtId(unix_path),
-        template.opcodes.len,
-        std.zig.fmtId(unix_path),
-    });
-
-    try dep_out.print("\"{}{s}{}\" ", .{
-        std.zig.fmtEscapes(current_dir_path),
-        std.fs.path.sep_str,
-        std.zig.fmtEscapes(unix_path),
-    });
-
-    return source;
+    const info = template_files.get(unix_path) orelse return error.FileNotFound;
+    return info.source;
 }
 
 const log = std.log.scoped(.index_resources);
