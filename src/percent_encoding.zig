@@ -63,9 +63,9 @@ pub fn encode(raw: []const u8, comptime options: Encode_Options) Encoder(options
 pub fn Encoder(comptime options: Encode_Options) type {
     return struct {
         remaining: []const u8,
-        temp: [3]u8 = "%00",
+        temp: [3]u8 = "%00".*,
 
-        pub fn next(self: *Encoder) ?[]const u8 {
+        pub fn next(self: *@This()) ?[]const u8 {
             const remaining = self.remaining;
             if (remaining.len == 0) return null;
 
@@ -86,8 +86,8 @@ pub fn Encoder(comptime options: Encode_Options) type {
                         self.remaining = remaining[i..];
                         return remaining[0..i];
                     }
-                    const temp: []const u8 = self.temp;
-                    @memcpy(temp[1..], std.fmt.bytesToHex(&[_]u8{c}, .upper));
+                    const temp: []u8 = &self.temp;
+                    @memcpy(temp[1..], &std.fmt.bytesToHex(&[_]u8{c}, .upper));
                     self.remaining = remaining[1..];
                     return temp;
                 }
