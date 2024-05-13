@@ -129,7 +129,30 @@ pub fn Server(comptime Injector: type) type {
             log.debug("C{}: Assigned to thread {}", .{ connection_num, std.Thread.getCurrentId() });
 
             while (server.state == .ready and thread_pool.is_running()) {
-                temp.reset(.{});
+                defer {
+                    const final_usage = temp.snapshot();
+                    const high_water = temp.high_water_usage();
+                    const committed = temp.committed();
+                    const reserved = temp.reservation.len;
+                    const prev_estimate = temp.usage_estimate;
+                    temp.reset(.{
+                        .usage_contraction_rate = 16,
+                        .usage_expansion_rate = 32,
+                        .fast_usage_expansion_rate = 128,
+                    });
+                    const new_committed = temp.committed();
+                    const new_estimate = temp.usage_estimate;
+                    log.debug("Thread {} temp usage: final={d}  high water={d}  prev_estimate={d}  d_estimate={d}  released={d}  committed={d}  reserved={d}", .{
+                        std.Thread.getCurrentId(),
+                        fmt.fmtBytes(final_usage),
+                        fmt.fmtBytes(high_water),
+                        fmt.fmtBytes(prev_estimate),
+                        fmt.fmtBytesSigned(@as(isize, @intCast(new_estimate)) - @as(isize, @intCast(prev_estimate))),
+                        fmt.fmtBytes(committed - new_committed),
+                        fmt.fmtBytes(new_committed),
+                        fmt.fmtBytes(reserved),
+                    });
+                }
                 request = .{
                     .connection_number = connection_num,
                     .req = server.receiveHead() catch |err| switch (err) {
@@ -220,4 +243,5 @@ const Request = @import("Request.zig");
 const Pool = @import("Pool.zig");
 const Temp_Allocator = @import("Temp_Allocator");
 const tempora = @import("tempora");
+const fmt = @import("fmt");
 const std = @import("std");

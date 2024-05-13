@@ -37,7 +37,7 @@ const hello = struct {
 
 const index = struct {
     pub fn get(req: *http.Request) !void {
-        try req.render("index.html", {}, .{});
+        try req.render("index.zk", {}, .{});
     }
 };
 

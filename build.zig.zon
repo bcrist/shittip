@@ -1,6 +1,6 @@
 .{
     .name = "shittip",
-    .version = "0.2.3",
+    .version = "0.2.4",
     .minimum_zig_version = "0.12.0",
     .paths = .{
         "src",
@@ -9,8 +9,12 @@
     },
     .dependencies = .{
         .@"Zig-TempAllocator" = .{
-            .url = "git+https://github.com/bcrist/Zig-TempAllocator#2401120308ba920ca95fdcf9a311c63341a7e04d",
-            .hash = "12207e7d78892ee60eeb80dc6c8f798a9e6cdc396c8fcc668ed4bffbd2863330ea18",
+            .url = "git+https://github.com/bcrist/Zig-TempAllocator#caf8a4941aeca4d670c7cf9cb68023b9731c24b3",
+            .hash = "1220387f9f8e7bd3d2914c6e55edf661c061d8333287d25c814ff7f29925e4441d11",
+        },
+        .@"Zig-fmtHelper" = .{
+            .url = "git+https://github.com/bcrist/Zig-fmtHelper#c54bfc35d483f0dbf90362309ff761cd7f609b56",
+            .hash = "1220631b79ba66eaf87bb58ce27bad48bc454241c5cd173ece0124f81fa4ea540634",
         },
         .tempora = .{
             .url = "git+https://github.com/bcrist/tempora#a0eb5f4b88954d0d0ff6abe2900e4010d9cd44e1",

@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const ext = .{
         .Temp_Allocator = b.dependency("Zig-TempAllocator", .{}).module("Temp_Allocator"),
+        .fmt = b.dependency("Zig-fmtHelper", .{}).module("fmt"),
         .tempora = b.dependency("tempora", .{}).module("tempora"),
         .dizzy = b.dependency("dizzy", .{}).module("dizzy"),
         .zkittle = b.dependency("zkittle", .{}).module("zkittle"),
@@ -12,6 +13,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{ .path = "src/http.zig" },
     });
     http.addImport("Temp_Allocator", ext.Temp_Allocator);
+    http.addImport("fmt", ext.fmt);
     http.addImport("tempora", ext.tempora);
     http.addImport("dizzy", ext.dizzy);
     http.addImport("zkittle", ext.zkittle);

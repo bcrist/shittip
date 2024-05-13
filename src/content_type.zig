@@ -1,9 +1,20 @@
-pub const text = "text/plain; charset=UTF-8";
-pub const html = "text/html; charset=UTF-8";
-pub const css = "text/css; charset=UTF-8";
-pub const js = "text/javascript; charset=UTF-8";
-pub const json = "application/json; charset=UTF-8";
-pub const xml = "application/xml; charset=UTF-8";
+pub const without_encoding = struct {
+    pub const text = "text/plain";
+    pub const html = "text/html";
+    pub const css = "text/css";
+    pub const js = "text/javascript";
+    pub const json = "application/json";
+    pub const xml = "application/xml";
+    pub const form_urlencoded = "application/x-www-form-urlencoded";
+};
+
+pub const text = without_encoding.text ++ "; charset=UTF-8";
+pub const html = without_encoding.html ++ "; charset=UTF-8";
+pub const css = without_encoding.css ++ "; charset=UTF-8";
+pub const js = without_encoding.js ++ "; charset=UTF-8";
+pub const json = without_encoding.json ++ "; charset=UTF-8";
+pub const xml = without_encoding.xml ++ "; charset=UTF-8";
+pub const form_urlencoded = without_encoding.form_urlencoded ++ "; charset=UTF-8";
 
 pub const jpeg = "image/jpeg";
 pub const png = "image/png";
