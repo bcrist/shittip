@@ -50,6 +50,7 @@ pub fn handle(self: *Request) error{CloseConnection}!void {
             error.SkipRemainingHandlers => break,
             error.BadRequest => try self.maybe_respond_err(.{ .status = .bad_request }),
             error.Unauthorized => try self.maybe_respond_err(.{ .status = .unauthorized }),
+            error.MethodNotAllowed => try self.maybe_respond_err(.{ .status = .method_not_allowed }),
             else => try self.maybe_respond_err(.{ .err = err, .trace = @errorReturnTrace() }),
         };
     }
@@ -92,6 +93,28 @@ pub fn chain(self: *Request, flow: []const u8) error{CloseConnection}!bool {
 
 pub fn header_iterator(self: *Request) std.http.HeaderIterator {
     return self.req.iterateHeaders();
+}
+
+pub fn get_header(self: *Request, name: []const u8) ?std.http.Header {
+    var iter = self.header_iterator();
+    while (iter.next()) |header| {
+        if (std.ascii.eqlIgnoreCase(name, header.name)) {
+            return header;
+        }
+    }
+    return null;
+}
+
+pub fn check_accept_encoding(self: *Request, desired_encoding: std.http.ContentEncoding) bool {
+    if (desired_encoding == .identity) return true;
+    if (self.get_header("accept-encoding")) |header| {
+        const name = @tagName(desired_encoding);
+        var iter = std.mem.tokenizeAny(u8, header.value, ", ");
+        while (iter.next()) |item| {
+            if (std.ascii.eqlIgnoreCase(item, name)) return true;
+        }
+    }
+    return false;
 }
 
 pub fn path_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar) {

@@ -136,7 +136,8 @@ pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Han
     return .{
         resource_path(source_path),
         static_internal(.{
-            .content = resource_content(source_path),
+            .content = resource_compressed_content(source_path),
+            .content_encoding = .deflate,
             .content_type = content_type.lookup.get(extension),
             .cache_control = "max-age=31536000, immutable, public",
             .etag = resource_etag(source_path),
@@ -150,7 +151,7 @@ pub fn resource_path(comptime source_path: []const u8) []const u8 {
     return comptime "/" ++ @field(root.resources, source_path) ++ extension;
 }
 
-pub fn resource_content(comptime source_path: []const u8) []const u8 {
+pub fn resource_compressed_content(comptime source_path: []const u8) []const u8 {
     return @field(root.resources.content, source_path);
 }
 
@@ -160,6 +161,7 @@ pub fn resource_etag(comptime source_path: []const u8) []const u8 {
 
 const Static_Internal_Route_Options = struct {
     content: []const u8,
+    content_encoding: std.http.ContentEncoding = .identity,
     content_type: ?[]const u8 = null,
     cache_control: ?[]const u8 = null,
     etag: ?[]const u8 = null,
@@ -172,7 +174,32 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
             var content = options.content;
             switch (req.method) {
                 .HEAD, options.method => {},
-                else => return,
+                else => return error.MethodNotAllowed,
+            }
+
+            if (req.check_accept_encoding(options.content_encoding)) {
+                try req.set_response_header("content-encoding", @tagName(options.content_encoding));
+            } else {
+                var stream = std.io.fixedBufferStream(content);
+                var uncompressed = try std.ArrayList(u8).initCapacity(allocator, @max(4096, content.len * 2));
+                switch (options.content_encoding) {
+                    .deflate => try std.compress.zlib.decompress(stream.reader(), uncompressed.writer()),
+                    .gzip => try std.compress.gzip.decompress(stream.reader(), uncompressed.writer()),
+                    .zstd => {
+                        const window_buf = try allocator.alloc(u8, std.compress.zstd.DecompressorOptions.default_window_buffer_len);
+                        defer allocator.free(window_buf);
+                        
+                        var decompressor = std.compress.zstd.decompressor(stream.reader(), .{ .window_buffer = &window_buf });
+                        while (true) {
+                            try uncompressed.ensureUnusedCapacity(4096);
+                            const bytes_read = try decompressor.read(uncompressed.unusedCapacitySlice());
+                            if (bytes_read == 0) break;
+                            uncompressed.items.len += bytes_read;
+                        }
+                    },
+                    else => return error.BadRequest,
+                }
+                content = uncompressed.items;
             }
 
             if (options.content_type) |ct| _ = try req.maybe_add_response_header("content-type", ct);

@@ -31,7 +31,7 @@ const Resource_File = struct {
     realpath: []const u8,
     static_template: bool,
     digest: ?Digest = null,
-    content: ?[]const u8 = null,
+    compressed_content: ?[]const u8 = null,
     http_path: ?[]const u8 = null,
 };
 
@@ -201,8 +201,13 @@ fn process_resource(path: []const u8, info: *Resource_File) anyerror!void {
     var hash: Digest = undefined;
     Hash.hash(content, &hash, .{});
 
+    var stream = std.io.fixedBufferStream(content);
+    var compressed = std.ArrayList(u8).init(gpa.allocator());
+    defer compressed.deinit();
+    try std.compress.zlib.compress(stream.reader(), compressed.writer(), .{ .level = .level_9 });
+
     info.digest = hash;
-    info.content = try arena.allocator().dupe(u8, content);
+    info.compressed_content = try arena.allocator().dupe(u8, compressed.items);
     info.http_path = try std.fmt.allocPrint(arena.allocator(), "/{}{s}", .{ std.fmt.fmtSliceHexLower(&hash), ext });
 }
 
@@ -250,6 +255,7 @@ fn write_output(out_path: []const u8) !void {
 
     try out.writeAll(
         \\
+        \\/// zlib compressed resource content
         \\pub const content = struct {
         \\
     );
@@ -259,7 +265,7 @@ fn write_output(out_path: []const u8) !void {
         while (iter.next()) |entry| {
             const path = entry.key_ptr.*;
             const info = entry.value_ptr.*;
-            if (info.content) |content| {
+            if (info.compressed_content) |content| {
                 try out.print("    pub const {} = \"{}\";\n", .{
                     std.zig.fmtId(path),
                     std.zig.fmtEscapes(content),
