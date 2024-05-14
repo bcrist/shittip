@@ -43,7 +43,7 @@ pub fn encode_alloc(allocator: std.mem.Allocator, raw: []const u8, comptime opti
 
     return result.items;
 }
-pub fn encode_append(list: *std.ArrayList(u8), raw: []const u8, comptime options: Encode_Options) ![]const u8 {
+pub fn encode_maybe_append(list: *std.ArrayList(u8), raw: []const u8, comptime options: Encode_Options) ![]const u8 {
     const prefix_length = list.items.len;
     var iter = encode(raw, options);
     if (iter.next()) |first| {
@@ -56,6 +56,12 @@ pub fn encode_append(list: *std.ArrayList(u8), raw: []const u8, comptime options
         }
     }
     return list.items[prefix_length..];
+}
+pub fn encode_append(list: *std.ArrayList(u8), raw: []const u8, comptime options: Encode_Options) !void {
+    var iter = encode(raw, options);
+    while (iter.next()) |part| {
+        try list.appendSlice(part);
+    }
 }
 pub fn encode(raw: []const u8, comptime options: Encode_Options) Encoder(options) {
     return .{ .remaining = raw };
@@ -119,7 +125,7 @@ pub fn decode_alloc(allocator: std.mem.Allocator, encoded: []const u8) ![]const 
 
     return result.items;
 }
-pub fn decode_append(list: *std.ArrayList(u8), encoded: []const u8) ![]const u8 {
+pub fn decode_maybe_append(list: *std.ArrayList(u8), encoded: []const u8) ![]const u8 {
     const prefix_length = list.items.len;
     var iter = decode(encoded);
     if (iter.next()) |first| {
@@ -132,6 +138,12 @@ pub fn decode_append(list: *std.ArrayList(u8), encoded: []const u8) ![]const u8 
         }
     }
     return list.items[prefix_length..];
+}
+pub fn decode_append(list: *std.ArrayList(u8), encoded: []const u8) !void {
+    var iter = decode(encoded);
+    while (iter.next()) |part| {
+        try list.appendSlice(part);
+    }
 }
 pub fn decode(encoded: []const u8) Decoder {
     return .{ .remaining = encoded };
