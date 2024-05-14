@@ -70,27 +70,26 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
         }
 
         fn strip_path_params(allocator: std.mem.Allocator, target: []const u8) ![]const u8 {
-            // TODO: do percent encoding after splitting on '/', like Request.get_path_param
-            const decoded = try percent_encoding.decode_alloc(allocator, target);
-            const extra_bytes = std.mem.count(u8, decoded, ":");
+            const extra_bytes = std.mem.count(u8, target, ":");
 
-            var list = try std.ArrayList(u8).initCapacity(allocator, decoded.len + extra_bytes);
-            var iter = std.mem.splitScalar(u8, decoded, '/');
+            var list = try std.ArrayList(u8).initCapacity(allocator, target.len + extra_bytes);
+            var iter = std.mem.splitScalar(u8, target, '/');
             var first = true;
             while (iter.next()) |part| {
                 if (first) first = false else list.appendAssumeCapacity('/');
 
                 if (std.mem.indexOfScalar(u8, part, ':')) |end| {
-                    list.appendSliceAssumeCapacity(part[0 .. end + 1]);
+                    try percent_encoding.decode_append(&list, part[0 .. end + 1]);
                     list.appendAssumeCapacity('*');
                     continue;
                 }
 
-                _ = std.fmt.parseInt(u128, part, 10) catch {
-                    list.appendSliceAssumeCapacity(part);
-                    continue;
-                };
+                const saved_len = list.items.len;
+                const decoded_part = try percent_encoding.decode_maybe_append(&list, part);
 
+                _ = std.fmt.parseInt(u128, decoded_part, 10) catch continue;
+
+                list.items.len = saved_len;
                 list.appendAssumeCapacity('*');
             }
             return std.mem.trimRight(u8, list.items, "/");

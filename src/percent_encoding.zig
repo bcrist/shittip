@@ -82,7 +82,7 @@ pub fn Encoder(comptime options: Encode_Options) type {
                         switch (options) {
                             .encode_all, .encode_other_and_reserved => true,
                             .encode_other => false,
-                            .encode_other_and => |char_flags| @field(char_flags, cc),
+                            .encode_other_and => |char_flags| @field(char_flags, &.{cc} ),
                         },
                     else => true,
                 };

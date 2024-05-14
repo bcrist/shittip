@@ -51,6 +51,7 @@ pub fn handle(self: *Request) error{CloseConnection}!void {
             error.BadRequest => try self.maybe_respond_err(.{ .status = .bad_request }),
             error.Unauthorized => try self.maybe_respond_err(.{ .status = .unauthorized }),
             error.MethodNotAllowed => try self.maybe_respond_err(.{ .status = .method_not_allowed }),
+            error.UnsupportedMediaType => try self.maybe_respond_err(.{ .status = .unsupported_media_type }),
             else => try self.maybe_respond_err(.{ .err = err, .trace = @errorReturnTrace() }),
         };
     }
