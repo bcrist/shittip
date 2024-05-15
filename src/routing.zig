@@ -84,11 +84,10 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
                     continue;
                 }
 
+                // if the whole path part can be parsed as an integer, replace it with *, otherwise keep it as-is.
                 const saved_len = list.items.len;
-                const decoded_part = try percent_encoding.decode_maybe_append(&list, part);
-
-                _ = std.fmt.parseInt(u128, decoded_part, 10) catch continue;
-
+                try percent_encoding.decode_append(&list, part);
+                _ = std.fmt.parseInt(u128, list.items[saved_len..], 10) catch continue;
                 list.items.len = saved_len;
                 list.appendAssumeCapacity('*');
             }
@@ -131,14 +130,19 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
 }
 
 pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Handler } {
-    const extension = std.fs.path.extension(source_path);
     @setEvalBranchQuota(5000); // for content_type.lookup
+    const extension = std.fs.path.extension(source_path);
+    const ct = content_type.lookup.get(extension);
+    return resource_with_content_type(source_path, ct);
+}
+
+pub fn resource_with_content_type(comptime source_path: []const u8, comptime ct: ?[]const u8) struct { []const u8, Alloc_Handler } {
     return .{
         resource_path(source_path),
         static_internal(.{
             .content = resource_compressed_content(source_path),
             .content_encoding = .deflate,
-            .content_type = content_type.lookup.get(extension),
+            .content_type = ct,
             .cache_control = "max-age=31536000, immutable, public",
             .etag = resource_etag(source_path),
             .last_modified_utc = root.resources.build_time,
