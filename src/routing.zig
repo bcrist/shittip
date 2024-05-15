@@ -132,6 +132,7 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
 
 pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Handler } {
     const extension = std.fs.path.extension(source_path);
+    @setEvalBranchQuota(5000); // for content_type.lookup
     return .{
         resource_path(source_path),
         static_internal(.{
