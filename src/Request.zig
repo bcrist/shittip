@@ -119,7 +119,11 @@ pub fn check_accept_encoding(self: *Request, desired_encoding: std.http.ContentE
 }
 
 pub fn path_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar) {
-    return std.mem.splitScalar(u8, self.full_path, '/');
+    var full_path = self.full_path;
+    if (std.mem.startsWith(u8, full_path, "/")) {
+        full_path = full_path[1..];
+    }
+    return std.mem.splitScalar(u8, full_path, '/');
 }
 
 pub fn unparsed_path_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar) {
