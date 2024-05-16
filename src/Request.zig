@@ -151,7 +151,7 @@ pub fn query_iterator(self: *Request) Query_Iterator {
 }
 
 pub fn get_query_param(self: *Request, name: []const u8) !?[]const u8 {
-    var iter = self.query_iterator(server.temp.allocator());
+    var iter = self.query_iterator();
     while (try iter.next()) |param| {
         if (std.mem.eql(u8, param.name, name)) {
             return param.value;
@@ -161,7 +161,7 @@ pub fn get_query_param(self: *Request, name: []const u8) !?[]const u8 {
 }
 
 pub fn has_query_param(self: *Request, name: []const u8) !bool {
-    var iter = self.query_iterator(server.temp.allocator());
+    var iter = self.query_iterator();
     defer iter.deinit();
     while (try iter.next()) |param| {
         if (std.mem.eql(u8, param.name, name)) {
