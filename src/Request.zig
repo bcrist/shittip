@@ -146,8 +146,8 @@ pub fn get_path_param(self: *Request, name: []const u8) !?[]const u8 {
     return null;
 }
 
-pub fn query_iterator(self: *Request, temp: std.mem.Allocator) Query_Iterator {
-    return Query_Iterator.init(temp, self.query);
+pub fn query_iterator(self: *Request) Query_Iterator {
+    return Query_Iterator.init(server.temp.allocator(), self.query);
 }
 
 pub fn get_query_param(self: *Request, name: []const u8) !?[]const u8 {
@@ -169,6 +169,14 @@ pub fn has_query_param(self: *Request, name: []const u8) !bool {
         }
     }
     return false;
+}
+
+pub fn body_reader(self: *Request) !std.io.AnyReader {
+    return self.req.reader();
+}
+
+pub fn form_iterator(self: *Request) !Query_Reader {
+    return try Query_Reader.init(server.temp.allocator(), try self.body_reader());
 }
 
 pub fn ensure_response_not_started(self: *Request) !void {
@@ -437,6 +445,7 @@ pub fn render(self: *Request, comptime template_path: []const u8, data: anytype,
 const log = std.log.scoped(.http);
 
 const Query_Iterator = @import("Query_Iterator.zig");
+const Query_Reader = @import("Query_Reader.zig");
 const percent_encoding = @import("percent_encoding.zig");
 const content_type = @import("content_type.zig");
 const zkittle = @import("zkittle");

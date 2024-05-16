@@ -3,10 +3,7 @@ inner: std.mem.SplitIterator(u8, .scalar),
 
 const Query_Iterator = @This();
 
-pub const Query_Param = struct {
-    name: []const u8,
-    value: ?[]const u8,
-};
+pub const Query_Param = @import("Query_Param.zig");
 
 pub fn init(allocator: std.mem.Allocator, query: []const u8) Query_Iterator {
     const params = if (std.mem.startsWith(u8, query, "?")) query[1..] else query;

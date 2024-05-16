@@ -17,6 +17,11 @@ pub fn query_iterator(allocator: std.mem.Allocator, raw_value: []const u8) Query
     return Query_Iterator.init(allocator, raw_value);
 }
 
+pub const Query_Reader = @import("Query_Reader.zig");
+pub fn query_reader(allocator: std.mem.Allocator, reader: std.io.AnyReader) !Query_Reader {
+    return Query_Reader.init(allocator, reader);
+}
+
 pub fn temp() std.mem.Allocator {
     return server.temp.allocator();
 }
