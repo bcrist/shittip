@@ -26,6 +26,10 @@ pub fn temp() std.mem.Allocator {
     return server.temp.allocator();
 }
 
+pub fn tprint(comptime fmt: []const u8, args: anytype) std.fmt.AllocPrintError![]u8 {
+    return std.fmt.allocPrint(server.temp.allocator(), fmt, args);
+}
+
 pub const Thread_Pool = @import("Pool.zig");
 const util = @import("util.zig");
 const server = @import("server.zig");
