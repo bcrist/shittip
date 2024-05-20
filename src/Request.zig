@@ -232,6 +232,23 @@ pub fn get_response_header(self: *Request, name: []const u8) ?[]const u8 {
     return null;
 }
 
+pub fn check_and_add_last_modified(self: *Request, last_modified_utc: tempora.Date_Time) !void {
+    try self.add_response_header("last-modified", try util.format_http_date(server.temp.allocator(), last_modified_utc));
+    if (self.get_header("if-modified-since")) |header| {
+        const DTO = tempora.Date_Time.With_Offset;
+        if (DTO.from_string(DTO.fmt_http, header.value)) |last_seen| {
+            std.debug.assert(last_seen.utc_offset_ms == 0);
+            if (!last_seen.dt.is_before(last_modified_utc)) {
+                self.response_status = .not_modified;
+                try self.respond("");
+                return error.SkipRemainingHandlers;
+            }
+        } else |_| {
+            log.debug("Could not parse if-modified-since date: {s}", .{ header.value });
+        }
+    }
+}
+
 pub fn response(self: *Request) !*std.http.Server.Response {
     switch (self.response_state) {
         .not_started => {
