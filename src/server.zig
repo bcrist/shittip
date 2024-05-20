@@ -142,7 +142,7 @@ pub fn Server(comptime Injector: type) type {
                     });
                     const new_committed = temp.committed();
                     const new_estimate = temp.usage_estimate;
-                    log.debug("Thread {} temp usage: final={d}  high water={d}  prev_estimate={d}  d_estimate={d}  released={d}  committed={d}  reserved={d}", .{
+                    temp_log.debug("Thread {} temp usage: final={d}  high water={d}  prev_estimate={d}  d_estimate={d}  released={d}  committed={d}  reserved={d}", .{
                         std.Thread.getCurrentId(),
                         fmt.fmtBytes(final_usage),
                         fmt.fmtBytes(high_water),
@@ -194,23 +194,6 @@ pub fn Server(comptime Injector: type) type {
                 request.handle() catch return;
             }
         }
-
-        
-
-
-
-            //     if (maybe_handler) |handler| {
-            //         handler(request) catch |err| switch (err) {
-            //             error.CloseConnection => return err,
-            //             error.BadRequest => try respond_err(request, .{ .status = .bad_request }),
-            //             else => try respond_err(request, .{ .err = err, .trace = @errorReturnTrace() }),
-            //         };
-            //     } else {
-            //         try respond_err(request, .{ .status = .method_not_allowed });
-            //     }
-            // } else {
-            //     try respond_err(request, .{ .status = .not_found });
-            // }
     };
 }
 
@@ -237,6 +220,7 @@ pub threadlocal var request: Request = undefined;
 pub const Registry = std.StringHashMap(std.ArrayListUnmanaged(Request.Handler_Func));
 
 const log = std.log.scoped(.http);
+const temp_log = std.log.scoped(.@"http.temp");
 
 const routing = @import("routing.zig");
 const Request = @import("Request.zig");
