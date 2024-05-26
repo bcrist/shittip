@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
     };
 
     const http = b.addModule("http", .{
-        .root_source_file = .{ .path = "src/http.zig" },
+        .root_source_file = b.path("src/http.zig"),
     });
     http.addImport("Temp_Allocator", ext.Temp_Allocator);
     http.addImport("fmt", ext.fmt);
@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
     http.addImport("zkittle", ext.zkittle);
 
     const tests = b.addTest(.{
-        .root_source_file = .{ .path = "test.zig"},
+        .root_source_file = b.path("test.zig"),
         .optimize = b.standardOptimizeOption(.{}),
         .target = b.standardTargetOptions(.{}),
     });
@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
 
     const index_resources_exe = b.addExecutable(.{
         .name = "index_resources",
-        .root_source_file = .{ .path = "src/index_resources.zig" },
+        .root_source_file = b.path("src/index_resources.zig"),
         .target = b.host,
         .optimize = .ReleaseFast,
     });
@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) void {
 
     const index_resources_debug_exe = b.addExecutable(.{
         .name = "index_resources_debug",
-        .root_source_file = .{ .path = "src/index_resources.zig" },
+        .root_source_file = b.path("src/index_resources.zig"),
         .target = b.host,
         .optimize = .Debug,
     });

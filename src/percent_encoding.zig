@@ -180,4 +180,43 @@ pub const Decoder = struct {
     }
 };
 
+pub fn fmtEncoded(raw: []const u8) std.fmt.Formatter(format) {
+    return .{ .data = raw };
+}
+
+fn format(raw: []const u8, comptime fmt: []const u8, _: std.fmt.FormatOptions, writer: anytype) @TypeOf(writer).Error!void {
+    comptime var encode_options: Encode_Options = .encode_other_and_reserved;
+
+    if (fmt.len > 0) {
+        encode_options = .{ .encode_other_and = .{} };
+        const ptr = &encode_options.encode_other_and;
+        inline for (fmt) |c| switch (c) {
+            '!' => ptr.@"!" = true,
+            '#' => ptr.@"#" = true,
+            '$' => ptr.@"$" = true,
+            '&' => ptr.@"&" = true,
+            '\'' => ptr.@"'" = true,
+            '(' => ptr.@"(" = true,
+            ')' => ptr.@")" = true,
+            '*' => ptr.@"*" = true,
+            '+' => ptr.@"+" = true,
+            ',' => ptr.@"," = true,
+            '/' => ptr.@"/" = true,
+            'c' => ptr.@":" = true,
+            ';' => ptr.@";" = true,
+            '=' => ptr.@"=" = true,
+            '?' => ptr.@"?" = true,
+            '@' => ptr.@"@" = true,
+            '[' => ptr.@"[" = true,
+            ']' => ptr.@"]" = true,
+            else => @compileError("invalid percent encoding format: " ++ fmt),
+        };
+    }
+
+    var encoder = encode(raw, encode_options);
+    while (encoder.next()) |chunk| {
+        try writer.writeAll(chunk);
+    }
+}
+
 const std = @import("std");
