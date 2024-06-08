@@ -20,11 +20,13 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
             exact_routes_list = exact_routes_list ++ .{ .{ path } };
         }
     }
-    const exact_routes = std.ComptimeStringMap(void, exact_routes_list);
 
     const final_prefix_routes_list = prefix_routes_list[0..].*;
 
     try server.register(prefix, struct {
+
+        const exact_routes = util.ComptimeStringMap(void, exact_routes_list);
+        
         pub fn route(allocator: std.mem.Allocator, req: *Request) anyerror!void {
             var path = req.unparsed_path;
 

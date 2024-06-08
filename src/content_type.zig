@@ -25,7 +25,7 @@ pub const pdf = "application/pdf";
 pub const ttf = "font/ttf";
 pub const woff2 = "font/woff2";
 
-pub const lookup = std.ComptimeStringMap([]const u8, .{
+pub const lookup = util.ComptimeStringMap([]const u8, .{
     .{ ".txt", text },
     .{ ".htm", html },
     .{ ".html", html },
@@ -44,4 +44,5 @@ pub const lookup = std.ComptimeStringMap([]const u8, .{
     .{ ".woff2", woff2 },
 });
 
+const util = @import("util.zig");
 const std = @import("std");

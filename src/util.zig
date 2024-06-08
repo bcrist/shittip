@@ -47,6 +47,13 @@ pub const Default_Injector = dizzy.Injector(struct {
 
 }, .{});
 
+pub const ComptimeStringMap = if (@import("builtin").zig_version.minor == 12)
+    std.ComptimeStringMap // TODO remove zig 0.12 support when zig 0.14 is released
+else struct {
+    pub fn ComptimeStringMap(comptime T: type, comptime kvs: anytype) std.StaticStringMap(T) {
+        return std.StaticStringMap(T).initComptime(kvs);
+    }
+}.ComptimeStringMap;
 
 const Pool = @import("Pool.zig");
 const Request = @import("Request.zig");

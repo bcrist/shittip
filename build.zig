@@ -2,8 +2,8 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const ext = .{
-        .Temp_Allocator = b.dependency("Zig-TempAllocator", .{}).module("Temp_Allocator"),
-        .fmt = b.dependency("Zig-fmtHelper", .{}).module("fmt"),
+        .Temp_Allocator = b.dependency("Temp_Allocator", .{}).module("Temp_Allocator"),
+        .fmt = b.dependency("fmtHelper", .{}).module("fmt"),
         .tempora = b.dependency("tempora", .{}).module("tempora"),
         .dizzy = b.dependency("dizzy", .{}).module("dizzy"),
         .zkittle = b.dependency("zkittle", .{}).module("zkittle"),

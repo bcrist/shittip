@@ -9,7 +9,7 @@ const Arg_Type = enum {
     template_extension,
     static_template_extension,
 };
-const arg_map = std.ComptimeStringMap(Arg_Type, .{
+const arg_map = util.ComptimeStringMap(Arg_Type, .{
     .{ "-s", .source_path },
     .{ "--src", .source_path },
     .{ "-o", .output_file },
@@ -370,5 +370,6 @@ fn template_source(raw_path: []const u8) anyerror!zkittle.Source {
 
 const log = std.log.scoped(.index_resources);
 
+const util = @import("util.zig");
 const zkittle = @import("zkittle");
 const std = @import("std");
