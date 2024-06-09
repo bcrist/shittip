@@ -81,14 +81,14 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
                 if (first) first = false else list.appendAssumeCapacity('/');
 
                 if (std.mem.indexOfScalar(u8, part, ':')) |end| {
-                    try percent_encoding.decode_append(&list, part[0 .. end + 1]);
+                    try percent_encoding.decode_append(&list, part[0 .. end + 1], .{});
                     list.appendAssumeCapacity('*');
                     continue;
                 }
 
                 // if the whole path part can be parsed as an integer, replace it with *, otherwise keep it as-is.
                 const saved_len = list.items.len;
-                try percent_encoding.decode_append(&list, part);
+                try percent_encoding.decode_append(&list, part, .{});
                 _ = std.fmt.parseInt(u128, list.items[saved_len..], 10) catch continue;
                 list.items.len = saved_len;
                 list.appendAssumeCapacity('*');

@@ -30,6 +30,8 @@ pub fn tprint(comptime fmt: []const u8, args: anytype) std.fmt.AllocPrintError![
     return std.fmt.allocPrint(server.temp.allocator(), fmt, args);
 }
 
+pub const fmtForUrl = percent_encoding.fmtEncoded;
+
 pub const Thread_Pool = @import("Pool.zig");
 const util = @import("util.zig");
 const server = @import("server.zig");

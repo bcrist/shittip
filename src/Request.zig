@@ -136,10 +136,10 @@ pub fn get_path_param(self: *Request, name: []const u8) !?[]const u8 {
     while (iter.next()) |part| {
         if (std.mem.indexOfScalar(u8, part, ':')) |end| {
             temp.clearRetainingCapacity();
-            const prefix = try percent_encoding.decode_maybe_append(&temp, part[0 .. end]);
+            const prefix = try percent_encoding.decode_maybe_append(&temp, part[0 .. end], .{});
             if (std.mem.eql(u8, name, prefix)) {
                 temp.clearRetainingCapacity();
-                return try percent_encoding.decode_maybe_append(&temp, part[end + 1 ..]);
+                return try percent_encoding.decode_maybe_append(&temp, part[end + 1 ..], .{});
             }
         }
     }
