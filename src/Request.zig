@@ -448,6 +448,17 @@ fn maybe_respond_err(self: *Request, options: Respond_Err_Options) error{CloseCo
     };
 }
 
+pub fn see_other(self: *Request, path: []const u8) !void {
+    if (self.get_header("hx-request") != null) {
+        self.response_status = .no_content;
+        try self.add_response_header("HX-Location", path);
+    } else {
+        self.response_status = .see_other;
+        try self.add_response_header("Location", path);
+    }
+    try self.respond("");
+}
+
 pub fn render(self: *Request, comptime template_path: []const u8, data: anytype, options: zkittle.Render_Options) anyerror!void {
     if (self.response_state == .not_started) {
         if (comptime content_type.lookup.get(std.fs.path.extension(template_path))) |ct| {
