@@ -102,7 +102,7 @@ pub fn Encoder(comptime options: Encode_Options) type {
                         self.remaining = remaining[i..];
                         return remaining[0..i];
                     }
-                    const temp: []u8 = &self.temp;
+                    var temp: []u8 = &self.temp;
                     if (c == ' ' and options.spaces == .@"+") {
                         temp = temp[2..];
                         temp[0] = '+';
