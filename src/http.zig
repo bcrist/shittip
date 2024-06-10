@@ -4,7 +4,7 @@ pub const parse_hostname = util.parse_hostname;
 pub const routing = @import("routing.zig");
 pub const Request = @import("Request.zig");
 pub const content_type = @import("content_type.zig");
-pub const percent_encoding = @import("percent_encoding.zig");
+pub const percent_encoding = @import("percent_encoding");
 pub const format_http_date = util.format_http_date;
 
 pub const ETag_Iterator = @import("ETag_Iterator.zig");

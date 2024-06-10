@@ -7,6 +7,7 @@ pub fn build(b: *std.Build) void {
         .tempora = b.dependency("tempora", .{}).module("tempora"),
         .dizzy = b.dependency("dizzy", .{}).module("dizzy"),
         .zkittle = b.dependency("zkittle", .{}).module("zkittle"),
+        .percent_encoding = b.dependency("percent_encoding", .{}).module("percent_encoding"),
     };
 
     const http = b.addModule("http", .{
@@ -17,6 +18,7 @@ pub fn build(b: *std.Build) void {
     http.addImport("tempora", ext.tempora);
     http.addImport("dizzy", ext.dizzy);
     http.addImport("zkittle", ext.zkittle);
+    http.addImport("percent_encoding", ext.percent_encoding);
 
     const tests = b.addTest(.{
         .root_source_file = b.path("test.zig"),

@@ -1,6 +1,6 @@
 .{
     .name = "shittip",
-    .version = "0.2.6",
+    .version = "0.2.7",
     .minimum_zig_version = "0.12.0",
     .paths = .{
         "src",
@@ -25,8 +25,12 @@
             .hash = "1220aac52c4e9bba0baae290d4171bd3980c19d22d8709900da5a7dc8ce6486d7819",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle#858dc502361ef2cd70ef79b0f837b889967a86d4",
-            .hash = "1220595b2a7eeb4b15d39fa78eaadb335c73f0f77dc1835efff554bdb741858c8a48",
+            .url = "git+https://github.com/bcrist/zkittle#194409afeb366abdaf4ed3acd82ffeec1255c25e",
+            .hash = "122011438f948a4f5d145d39d317d2f00bf73325aa368bf44c9b9ed1859888d18701",
+        },
+        .percent_encoding = .{
+            .url = "git+https://github.com/bcrist/zig-percent-encoding#058c4566fa9f1a261a4a3e2f93548445b38bd0dd",
+            .hash = "12204e3e77952273a67c11f2cd0de36996aa89cd677c8af1075fae3e44d0e8d010f0",
         },
     },
 }

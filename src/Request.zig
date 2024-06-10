@@ -474,7 +474,7 @@ const log = std.log.scoped(.http);
 
 const Query_Iterator = @import("Query_Iterator.zig");
 const Query_Reader = @import("Query_Reader.zig");
-const percent_encoding = @import("percent_encoding.zig");
+const percent_encoding = @import("percent_encoding");
 const content_type = @import("content_type.zig");
 const zkittle = @import("zkittle");
 const routing = @import("routing.zig");

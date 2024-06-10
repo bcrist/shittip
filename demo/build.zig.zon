@@ -12,8 +12,8 @@
             .hash = "1220cf89c3023cbd5c2dc81286975f8f25c62bc40ef3d52bf99fa7266345e4b7da73",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle#858dc502361ef2cd70ef79b0f837b889967a86d4",
-            .hash = "1220595b2a7eeb4b15d39fa78eaadb335c73f0f77dc1835efff554bdb741858c8a48",
+            .url = "git+https://github.com/bcrist/zkittle#194409afeb366abdaf4ed3acd82ffeec1255c25e",
+            .hash = "122011438f948a4f5d145d39d317d2f00bf73325aa368bf44c9b9ed1859888d18701",
         },
     },
 }

@@ -192,7 +192,7 @@ fn process_resource(path: []const u8, info: *Resource_File) anyerror!void {
         defer template.deinit(gpa.allocator());
 
         var writer = builder.writer();
-        try template.render(writer.any(), {}, .{ .escape_fn = zkittle.escape_none });
+        try template.render(writer.any(), {}, .{ .escape_fn = zkittle.escape.none });
 
         gpa.allocator().free(content);
         content = try builder.toOwnedSlice();

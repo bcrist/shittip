@@ -81,5 +81,5 @@ pub fn next(self: *Query_Reader) !?Query_Param {
     }
 }
 
-const percent_encoding = @import("percent_encoding.zig");
+const percent_encoding = @import("percent_encoding");
 const std = @import("std");

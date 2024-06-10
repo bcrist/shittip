@@ -297,7 +297,7 @@ const log = std.log.scoped(.http);
 
 const util = @import("util.zig");
 const content_type = @import("content_type.zig");
-const percent_encoding = @import("percent_encoding.zig");
+const percent_encoding = @import("percent_encoding");
 const ETag_Iterator = @import("ETag_Iterator.zig");
 const Request = @import("Request.zig");
 const Pool = @import("Pool.zig");
