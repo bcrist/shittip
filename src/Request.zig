@@ -249,6 +249,19 @@ pub fn check_and_add_last_modified(self: *Request, last_modified_utc: tempora.Da
     }
 }
 
+pub fn hx_current_url(self: *Request) ?[]const u8 {
+    return if (self.get_header("hx-current-url")) |param| param.value else null;
+}
+
+pub fn hx_current_query(self: *Request) []const u8 {
+    if (self.hx_current_url()) |url| {
+        if (std.mem.indexOfScalar(u8, url, '?')) |query_start| {
+            return url[query_start..];
+        }
+    }
+    return "";
+}
+
 pub fn response(self: *Request) !*std.http.Server.Response {
     switch (self.response_state) {
         .not_started => {
