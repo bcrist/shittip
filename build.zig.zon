@@ -25,8 +25,8 @@
             .hash = "1220aac52c4e9bba0baae290d4171bd3980c19d22d8709900da5a7dc8ce6486d7819",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle#159bc4819f1cfe03fefa8fe58b29d11c29592032",
-            .hash = "12208993a9356188eb7db1b95fec206f4b5085c6264ac1d2b2718c8854c0ea82fe80",
+            .url = "git+https://github.com/bcrist/zkittle#26ed0e03cc0a09127c9ea25809fdf47b29f6b23d",
+            .hash = "122020fdaf9e134f310c91ff5a09c7257b5f10da54f6c3fc24165ca7833701119246",
         },
         .percent_encoding = .{
             .url = "git+https://github.com/bcrist/zig-percent-encoding#058c4566fa9f1a261a4a3e2f93548445b38bd0dd",
