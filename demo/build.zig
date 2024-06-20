@@ -9,11 +9,9 @@ pub fn build(b: *std.Build) void {
         .optimize = b.standardOptimizeOption(.{}),
     });
     exe.root_module.addImport("http", b.dependency("shittip", .{}).module("http"));
-    exe.root_module.addImport("resources", shittip.resources(b, .{
-        .paths = &.{
-            b.path("resources"),
-        },
-    }));
+    exe.root_module.addImport("resources", shittip.resources(b, &.{
+        .{ .path = "resources" },
+    }, .{}));
     b.installArtifact(exe);
 
     var run = b.addRunArtifact(exe);

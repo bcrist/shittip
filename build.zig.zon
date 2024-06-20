@@ -4,6 +4,7 @@
     .minimum_zig_version = "0.12.0",
     .paths = .{
         "src",
+        "tools",
         "build.zig",
         "build.zig.zon",
     },
@@ -25,8 +26,8 @@
             .hash = "1220aac52c4e9bba0baae290d4171bd3980c19d22d8709900da5a7dc8ce6486d7819",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle#26ed0e03cc0a09127c9ea25809fdf47b29f6b23d",
-            .hash = "122020fdaf9e134f310c91ff5a09c7257b5f10da54f6c3fc24165ca7833701119246",
+            .url = "git+https://github.com/bcrist/zkittle#03a87443429b3983d7b856ac43f6ddd0e72c80f9",
+            .hash = "1220d388b761df713a2fdf3c1779fc540c9848582e23709e31b1f702f33528f3d4ef",
         },
         .percent_encoding = .{
             .url = "git+https://github.com/bcrist/zig-percent-encoding#058c4566fa9f1a261a4a3e2f93548445b38bd0dd",
