@@ -17,7 +17,7 @@ pub const Cache = struct {
     arena: std.mem.Allocator,
     gpa: std.mem.Allocator,
     include_dirs: std.ArrayListUnmanaged(Directory) = .{},
-    files: std.StringArrayHashMapUnmanaged(Resource_File) = .{},
+    files: std.StringArrayHashMapUnmanaged(*Resource_File) = .{},
 
     pub const Directory = struct {
         path: []const u8,
@@ -41,7 +41,7 @@ pub const Cache = struct {
     }
 
     pub fn get(self: *Cache, path: []const u8) !*Resource_File {
-        if (self.files.getPtr(path)) |file| return file;
+        if (self.files.get(path)) |file| return file;
 
         const ext = std.fs.path.extension(path);
 
@@ -49,13 +49,14 @@ pub const Cache = struct {
             var dir = try std.fs.cwd().openDir(dir_info.path, .{});
             defer dir.close();
 
-            const realpath = try dir.realpathAlloc(self.arena, path);
-            errdefer self.arena.free(realpath);
-
-            const stat = dir.statFile(realpath) catch |err| switch (err) {
+            const stat = dir.statFile(path) catch |err| switch (err) {
                 error.FileNotFound => continue,
                 else => return err,
             };
+
+            const realpath = try dir.realpathAlloc(self.arena, path);
+            errdefer self.arena.free(realpath);
+
             const source = try dir.readFileAllocOptions(self.arena, realpath, 1_000_000_000, stat.size, 1, null);
             errdefer self.arena.free(source);
 
@@ -64,25 +65,27 @@ pub const Cache = struct {
             } else false;
 
             const path_copy = try self.arena.dupe(u8, path);
+            const file = try self.arena.create(Resource_File);
 
             if (is_template) {
                 const tokens = try zkittle.Token.lex(self.arena, source);
-                try self.files.put(self.gpa, path_copy, .{
+                file.* = .{
                     .realpath = realpath,
                     .source = .{ .template = .{
                         .path = realpath,
                         .source = source,
                         .tokens = tokens,
                     }},
-                });
+                };
             } else {
-                try self.files.put(self.gpa, path_copy, .{
+                file.* = .{
                     .realpath = realpath,
                     .source = .{ .raw = source },
-                });
+                };
             }
 
-            return self.files.getPtr(path_copy).?;
+            try self.files.put(self.gpa, path_copy, file);
+            return file;
         }
 
         return error.FileNotFound;
