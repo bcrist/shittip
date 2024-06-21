@@ -461,12 +461,12 @@ fn maybe_respond_err(self: *Request, options: Respond_Err_Options) error{CloseCo
     };
 }
 
-pub fn see_other(self: *Request, path: []const u8) !void {
+pub fn redirect(self: *Request, path: []const u8, status: std.http.Status) !void {
     if (self.get_header("hx-request") != null) {
         self.response_status = .no_content;
         try self.add_response_header("HX-Location", path);
     } else {
-        self.response_status = .see_other;
+        self.response_status = status;
         try self.add_response_header("Location", path);
     }
     try self.respond("");
