@@ -1,6 +1,7 @@
 raw_temp: std.ArrayList(u8),
 decode_temp: std.ArrayList(u8),
 temp_consumed: bool,
+end_of_stream_reached: bool,
 reader: std.io.AnyReader,
 
 const Query_Reader = @This();
@@ -12,6 +13,7 @@ pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader) !Query_Reade
         .raw_temp = std.ArrayList(u8).init(allocator),
         .decode_temp = std.ArrayList(u8).init(allocator),
         .temp_consumed = undefined,
+        .end_of_stream_reached = undefined,
         .reader = undefined,
     };
     try self.reset(reader);
@@ -22,11 +24,13 @@ pub fn reset(self: *Query_Reader, reader: std.io.AnyReader) !void {
     self.raw_temp.clearRetainingCapacity();
     self.decode_temp.clearRetainingCapacity();
     self.temp_consumed = false;
+    self.end_of_stream_reached = false;
     self.reader = reader;
 
     const first_byte = reader.readByte() catch |err| switch (err) {
         error.EndOfStream => {
             self.temp_consumed = true;
+            self.end_of_stream_reached = true;
             return;
         },
         else => return err,
@@ -37,7 +41,9 @@ pub fn reset(self: *Query_Reader, reader: std.io.AnyReader) !void {
     }
 
     reader.streamUntilDelimiter(self.raw_temp.writer(), '&', null) catch |err| switch (err) {
-        error.EndOfStream => {},
+        error.EndOfStream => {
+            self.end_of_stream_reached = true;
+        },
         else => return err,
     };
 }
@@ -53,14 +59,16 @@ pub fn next(self: *Query_Reader) !?Query_Param {
         self.raw_temp.clearRetainingCapacity();
         self.decode_temp.clearRetainingCapacity();
         self.reader.streamUntilDelimiter(self.raw_temp.writer(), '&', null) catch |err| switch (err) {
-            error.EndOfStream => {},
+            error.EndOfStream => {
+                self.end_of_stream_reached = true;
+            },
             else => return err,
         };
     }
 
     self.temp_consumed = true;
     const entry = self.raw_temp.items;
-    if (entry.len == 0) return null;
+    if (entry.len == 0 and self.end_of_stream_reached) return null;
 
     if (std.mem.indexOfScalar(u8, entry, '=')) |end_of_name| {
         var name = try percent_encoding.decode_maybe_append(&self.decode_temp, entry[0..end_of_name], .{});

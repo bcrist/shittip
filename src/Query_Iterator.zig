@@ -24,6 +24,8 @@ pub fn deinit(self: *Query_Iterator) void {
 
 pub fn next(self: *Query_Iterator) !?Query_Param {
     if (self.inner.next()) |entry| {
+        if (entry.len == 0 and self.inner.buffer.len == 0) return null;
+
         self.temp.clearRetainingCapacity();
         if (std.mem.indexOfScalar(u8, entry, '=')) |end_of_name| {
             var name = try percent_encoding.decode_maybe_append(&self.temp, entry[0..end_of_name], .{});
