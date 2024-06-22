@@ -11,7 +11,15 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
         const path = route[0];
         if (route.len > 1) {
             inline for (1..route.len) |i| {
-                try server.register(prefix_without_placeholder ++ path, route[i]);
+                if (util.maybe_string(&route[1])) |flow_name| {
+                    try server.register(prefix_without_placeholder ++ path, struct {
+                        pub fn route_flow(req: *Request) !void {
+                            _ = try req.chain(flow_name);
+                        }
+                    }.route_flow);
+                } else {
+                    try server.register(prefix_without_placeholder ++ path, route[i]);
+                }
             }
         }
         if (comptime std.mem.endsWith(u8, path, "**")) {

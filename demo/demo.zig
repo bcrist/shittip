@@ -9,6 +9,7 @@ pub fn main() !void {
     try server.router("", .{
         .{ "/", r.module(Injector, index) },
         .{ "/something/**" },
+        .{ "/something_else/**", "/something/**" },
         r.resource("style.css"),
     });
 
