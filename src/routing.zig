@@ -41,6 +41,7 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
             if (exact_routes.has(path)) {
                 _ = try req.chain(try flow_name(allocator, path));
                 req.unparsed_path = "";
+                log.debug("unparsed path is now: {s}", .{ req.unparsed_path });
                 return;
             }
 
@@ -49,6 +50,7 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
                 if (std.mem.startsWith(u8, path, prefix_path_without_suffix)) {
                     _ = try req.chain(try flow_name(allocator, prefix_path));
                     req.unparsed_path = path[prefix_path_without_suffix.len..];
+                    log.debug("unparsed path is now: {s}", .{ req.unparsed_path });
                     return;
                 }
             }
@@ -58,6 +60,7 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
             if (exact_routes.has(path)) {
                 _ = try req.chain(try flow_name(allocator, path));
                 req.unparsed_path = "";
+                log.debug("unparsed path is now: {s}", .{ req.unparsed_path });
                 return;
             }
 
@@ -65,7 +68,8 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
                 const prefix_path_without_suffix = prefix_path[0 .. prefix_path.len - 2];
                 if (std.mem.startsWith(u8, path, prefix_path_without_suffix)) {
                     _ = try req.chain(try flow_name(allocator, prefix_path));
-                    req.unparsed_path = compute_new_unparsed_path(req, prefix_path);
+                    req.unparsed_path = compute_new_unparsed_path(req, prefix_path_without_suffix);
+                    log.debug("unparsed path is now: {s}", .{ req.unparsed_path });
                     return;
                 }
             }
