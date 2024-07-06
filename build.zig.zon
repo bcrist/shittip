@@ -30,8 +30,8 @@
             .hash = "12207843a59a79a582f485d6c4d0cf0d2e9dacdb3c2de59ed853fdb8151951b3bd05",
         },
         .percent_encoding = .{
-            .url = "git+https://github.com/bcrist/zig-percent-encoding#058c4566fa9f1a261a4a3e2f93548445b38bd0dd",
-            .hash = "12204e3e77952273a67c11f2cd0de36996aa89cd677c8af1075fae3e44d0e8d010f0",
+            .url = "git+https://github.com/bcrist/zig-percent-encoding#5bb61c66cabf8cd7724f1539ad5c4c421ebd2c4c",
+            .hash = "12208ce96000d7263c362543c19236d68cbf1f05c69c7305ed4915db82970719c61d",
         },
     },
 }
