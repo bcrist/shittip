@@ -26,7 +26,7 @@ pub inline fn maybe_string(ptr: anytype) ?[]const u8 {
 }
 
 pub fn format_http_date(allocator: std.mem.Allocator, utc: tempora.Date_Time) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{" ++ tempora.Date_Time.With_Offset.fmt_http ++ "}", .{ utc.with_offset(0) });
+    return std.fmt.allocPrint(allocator, tempora.Date_Time.With_Offset.http, .{ utc.with_offset(0) });
 }
 
 pub fn parse_hostname(temp: std.mem.Allocator, hostname: []const u8, port: u16) !std.net.Address {
