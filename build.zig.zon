@@ -18,8 +18,8 @@
             .hash = "12209b1ea766ffc90cf560ef37c7ceee6ed7b339ebcb7d08ca192c0ee146feba78e9",
         },
         .tempora = .{
-            .url = "git+https://github.com/bcrist/tempora#a0721ec6b7ac7e69978ec5e3d01659f2e3971c69",
-            .hash = "12203d3f3b8d6dbe8ca3e734204fe6f045375dfee1aa12b982bc0b787adff50e1d43",
+            .url = "git+https://github.com/bcrist/tempora#7888819f0a6be6701ceb424da8be028a93ddce7b",
+            .hash = "12200bc6c461d37080fc75641afadd97dc709561828da66d3f0b54e5e0330308525e",
         },
         .dizzy = .{
             .url = "git+https://github.com/bcrist/dizzy#a81b4ea573ce2020cb70fdc7f0047178662fecba",

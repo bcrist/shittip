@@ -233,7 +233,7 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
                 if (options.last_modified_utc) |last_modified| {
                     if (std.ascii.eqlIgnoreCase(header.name, "if-modified-since")) {
                         const DTO = tempora.Date_Time.With_Offset;
-                        const last_seen = DTO.from_string(DTO.fmt_http, header.value, null) catch continue;
+                        const last_seen = DTO.from_string(DTO.fmt_http, header.value) catch continue;
                         not_modified_by_date = !last_seen.dt.is_before(last_modified);
                     }
                 }
