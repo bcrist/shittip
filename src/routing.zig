@@ -1,7 +1,7 @@
 pub const Handler = *const fn(req: *Request) anyerror!void;
 pub const Alloc_Handler = *const fn(allocator: std.mem.Allocator, req: *Request) anyerror!void;
 
-pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: anytype) !void {
+pub fn router(svr: anytype, comptime prefix: []const u8, comptime routes: anytype) !void {
     comptime var prefix_routes_list: []const []const u8 = &.{};
     comptime var exact_routes_list: []const struct { []const u8 } = &.{};
 
@@ -12,13 +12,13 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
         if (route.len > 1) {
             inline for (1..route.len) |i| {
                 if (util.maybe_string(&route[1])) |flow_name| {
-                    try server.register(prefix_without_placeholder ++ path, struct {
+                    try svr.register(prefix_without_placeholder ++ path, struct {
                         pub fn route_flow(req: *Request) !void {
                             _ = try req.chain(flow_name);
                         }
                     }.route_flow);
                 } else {
-                    try server.register(prefix_without_placeholder ++ path, route[i]);
+                    try svr.register(prefix_without_placeholder ++ path, route[i]);
                 }
             }
         }
@@ -31,7 +31,7 @@ pub fn router(server: anytype, comptime prefix: []const u8, comptime routes: any
 
     const final_prefix_routes_list = prefix_routes_list[0..].*;
 
-    try server.register(prefix, struct {
+    try svr.register(prefix, struct {
 
         const exact_routes = util.ComptimeStringMap(void, exact_routes_list);
         
@@ -298,11 +298,12 @@ pub fn method(comptime required_method: std.http.Method) Handler {
     }.handler;
 }
 
-pub fn shutdown(req: *Request, pool: *Pool) !void {
+pub fn shutdown(req: *Request, pools: server.Pools) !void {
     log.info("starting shutdown", .{});
     try req.set_response_header("cache-control", "no-cache");
     req.response_keep_alive = false;
-    pool.stop();
+    pools.connection_thread_pool.stop();
+    pools.worker_thread_pool.stop();
 }
 
 const log = std.log.scoped(.http);
@@ -312,7 +313,7 @@ const content_type = @import("content_type.zig");
 const percent_encoding = @import("percent_encoding");
 const ETag_Iterator = @import("ETag_Iterator.zig");
 const Request = @import("Request.zig");
-const Pool = @import("Pool.zig");
+const server = @import("server.zig");
 const tempora = @import("tempora");
 const std = @import("std");
 const root = @import("root");

@@ -64,8 +64,8 @@ pub const Default_Injector = dizzy.Injector(struct {
         }
     }
 
-    pub fn inject_pool() *Pool {
-        return server.thread_pool;
+    pub fn inject_pools() server.Pools {
+        return server.pools;
     }
 
     pub fn inject_registry() *const server.Registry {

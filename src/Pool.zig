@@ -147,6 +147,8 @@ pub fn submit(self: *Pool, comptime func: anytype, args: std.meta.ArgsTuple(@Typ
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        if (!self.running) return error.PoolNotRunning;
+
         const closure = try self.allocator.create(Closure);
         closure.* = .{
             .args = args,
