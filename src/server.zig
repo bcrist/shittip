@@ -143,7 +143,13 @@ pub fn Server(comptime Injector: type) type {
                     log.warn("C{}: Failed to set socket receive timeout: {}", .{ connection_num, err });
                 };
 
-                try self.connection_pool.submit(handle_connection, .{ connection_num, connection });
+                self.connection_pool.submit(handle_connection, .{ connection_num, connection }) catch |err| {
+                    connection.stream.close();
+                    switch (err) {
+                        error.PoolNotRunning => log.debug("C{}: failed to submit to connection thread pool; server is shutting down", .{ connection_num }),
+                        else => return err,
+                    }
+                };
                 connection_num +%= 1;
             }
         }
