@@ -44,7 +44,7 @@ pub fn main() !void {
     { // Templates
         try out.print(
             \\const tempora = @import("tempora");
-            \\const zkittle = @import("zkittle");
+            \\const Template = @import("zkittle");
             \\
             \\pub const build_time = tempora.Date_Time.With_Offset.from_timestamp_s({}, null).dt;
             \\
@@ -52,7 +52,7 @@ pub fn main() !void {
             \\
             , .{ std.time.timestamp() });
 
-        var parser: zkittle.Parser = .{
+        var parser: Template.Parser = .{
             .gpa = gpa.allocator(),
             .include_callback = Resource_File.template_include,
             .resource_callback = Resource_File.template_resource,
@@ -70,42 +70,89 @@ pub fn main() !void {
         while (try walker.next()) |entry| {
             if (entry.kind != .file) continue;
 
-            const source = try zkittle.Source.init_file(arena.allocator(), template_dir, entry.path);
+            const source = try Template.Source.init_file(arena.allocator(), template_dir, entry.path);
+
+            var path_buf: [std.fs.MAX_PATH_BYTES + 100]u8 = undefined;
+            var path_buf_frag: [std.fs.MAX_PATH_BYTES + 100]u8 = undefined;
+            const operands_name = try std.fmt.bufPrint(&path_buf, "{s}.operand", .{ entry.path });
+            const opcodes_name = operands_name[0 .. operands_name.len - "erand".len];
+            const base_path = operands_name[0 .. operands_name.len - ".operand".len];
+            std.mem.replaceScalar(u8, operands_name, '\\', '/');
+            @memcpy(&path_buf_frag, &path_buf);
+            
 
             try parser.append(source);
+
+            for (parser.fragments.keys(), parser.fragments.values()) |frag_name, frag_info| {
+                const frag_suffix = try std.fmt.bufPrint(path_buf_frag[base_path.len..], "#{s}", .{ frag_name });
+                const template_name = path_buf_frag[0 .. base_path.len + frag_suffix.len];
+                if (frag_info.first + frag_info.len >= parser.instructions.len) {
+                    try out.print("    pub const {}: Template = .{{ .opcodes = data.{}[{}..], .operands = data.{}[{}..].ptr, .literal_data = data.strings }};\n", .{
+                        std.zig.fmtId(template_name),
+                        std.zig.fmtId(opcodes_name),
+                        frag_info.first,
+                        std.zig.fmtId(operands_name),
+                        frag_info.first,
+                    });
+                } else {
+                    try out.print("    pub const {}: Template = .{{ .opcodes = data.{}[{}..{}], .operands = data.{}[{}..].ptr, .literal_data = data.strings }};\n", .{
+                        std.zig.fmtId(template_name),
+                        std.zig.fmtId(opcodes_name),
+                        frag_info.first,
+                        frag_info.first + frag_info.len,
+                        std.zig.fmtId(operands_name),
+                        frag_info.first,
+                    });
+                }
+            }
+
             var template = try parser.finish(gpa.allocator(), false);
             defer template.deinit(gpa.allocator());
 
-            const instruction_data = try template.get_static_instruction_data(arena.allocator());
-            const instruction_count = template.opcodes.len;
-
-            var temp_path_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-            const unix_path = try std.fmt.bufPrint(&temp_path_buf, "{s}", .{ entry.path });
-            std.mem.replaceScalar(u8, unix_path, '\\', '/');
-
-            try out.print("    pub const {} = zkittle.init_static({}, &data.{}, data.strings);\n", .{
-                std.zig.fmtId(unix_path),
-                instruction_count,
-                std.zig.fmtId(unix_path),
+            try out.print("    pub const {}: Template = .{{ .opcodes = data.{}, .operands = data.{}.ptr, .literal_data = data.strings }};\n", .{
+                std.zig.fmtId(base_path),
+                std.zig.fmtId(opcodes_name),
+                std.zig.fmtId(operands_name),
             });
 
-            try tw.print("\n        pub const {} = [_]u64 {{", .{
-                std.zig.fmtId(unix_path),
+
+            try tw.print("\n        pub const {}: []const Template.Opcode = @ptrCast(&[_]u8 {{", .{
+                std.zig.fmtId(opcodes_name),
             });
 
-            var i: usize = 8;
-            for (instruction_data) |word| {
-                if (i == 8) {
+            const opcodes_per_line = 32;
+
+            var i: usize = opcodes_per_line;
+            for (template.opcodes) |word| {
+                if (i == opcodes_per_line) {
                     i = 0;
                     try tw.writeAll("\n            ");
                 } else {
                     i += 1;
                     try tw.writeByte(' ');
                 }
-                try tw.print("{},", .{ word });
+                try tw.print("{},", .{ @intFromEnum(word) });
             }
 
-            try tw.writeAll("\n        };\n");
+            try tw.print("\n        }});\n        pub const {}: []const Template.Operands = @ptrCast(&[_]u32 {{", .{
+                std.zig.fmtId(operands_name),
+            });
+
+            const operands_per_line = 8;
+
+            i = operands_per_line;
+            for (template.operands[0..template.opcodes.len]) |word| {
+                if (i == operands_per_line) {
+                    i = 0;
+                    try tw.writeAll("\n            ");
+                } else {
+                    i += 1;
+                    try tw.writeByte(' ');
+                }
+                try tw.print("0x{X},", .{ @as(u32, @bitCast(word)) });
+            }
+
+            try tw.writeAll("\n        });\n");
         }
 
         try out.writeAll(
@@ -211,5 +258,5 @@ var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
 const Resource_File = @import("Resource_File.zig");
-const zkittle = @import("zkittle");
+const Template = @import("zkittle");
 const std = @import("std");

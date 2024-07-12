@@ -69,12 +69,14 @@ pub const Cache = struct {
 
             if (is_template) {
                 const tokens = try zkittle.Token.lex(self.arena, source);
+                const hash = std.hash.Wyhash.hash(0, source);
                 file.* = .{
                     .realpath = realpath,
                     .source = .{ .template = .{
                         .path = realpath,
                         .source = source,
                         .tokens = tokens,
+                        .hash = hash,
                     }},
                 };
             } else {
