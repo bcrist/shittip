@@ -2,3 +2,5 @@ a
 \\#hello abc
 asdf
 \\~
+
+\\# boo @include "#hello" ~

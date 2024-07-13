@@ -6,6 +6,7 @@
 </head>
 <body>
     <main>
+        \\@include "something_else.zk#boo"//
         <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras fringilla lacus eu viverra consectetur. Praesent malesuada molestie dolor, ultricies luctus nisi varius tempus. Nullam at venenatis est. Ut ex nunc, sagittis non tempor a, eleifend ac velit. Duis feugiat blandit volutpat. Phasellus aliquam tincidunt ex, et tincidunt urna sollicitudin convallis. Sed quis ultricies tortor. Praesent non auctor nibh, maximus tincidunt leo. Mauris at dapibus urna. Nullam interdum rhoncus leo, sed pulvinar purus consectetur quis.
     </main>
 </body>

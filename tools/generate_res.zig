@@ -4,11 +4,11 @@
 pub fn main() !void {
     defer std.debug.assert(.ok == gpa.deinit());
 
-    Resource_File.cache = .{
+    var cache: Resource_File.Cache = .{
         .arena = arena.allocator(),
         .gpa = gpa.allocator(),
     };
-    defer Resource_File.cache.?.deinit();
+    defer cache.deinit();
 
     var arg_iter = try std.process.argsWithAllocator(gpa.allocator());
     defer arg_iter.deinit();
@@ -29,7 +29,7 @@ pub fn main() !void {
             try template_extensions.append(ext);
         } else {
             const path = try arena.allocator().dupe(u8, arg);
-            try Resource_File.cache.?.add_dir(path, template_extensions.items);
+            try cache.add_dir(path, template_extensions.items);
             template_extensions.clearRetainingCapacity();
         }
     }
@@ -54,6 +54,7 @@ pub fn main() !void {
 
         var parser: Template.Parser = .{
             .gpa = gpa.allocator(),
+            .callback_context = &cache,
             .include_callback = Resource_File.template_include,
             .resource_callback = Resource_File.template_resource,
         };
@@ -79,29 +80,28 @@ pub fn main() !void {
             const base_path = operands_name[0 .. operands_name.len - ".operand".len];
             std.mem.replaceScalar(u8, operands_name, '\\', '/');
             @memcpy(&path_buf_frag, &path_buf);
-            
 
             try parser.append(source);
 
             for (parser.fragments.keys(), parser.fragments.values()) |frag_name, frag_info| {
                 const frag_suffix = try std.fmt.bufPrint(path_buf_frag[base_path.len..], "#{s}", .{ frag_name });
                 const template_name = path_buf_frag[0 .. base_path.len + frag_suffix.len];
-                if (frag_info.first + frag_info.len >= parser.instructions.len) {
+                if (frag_info.first_instruction + frag_info.instruction_count >= parser.instructions.len) {
                     try out.print("    pub const {}: Template = .{{ .opcodes = data.{}[{}..], .operands = data.{}[{}..].ptr, .literal_data = data.strings }};\n", .{
                         std.zig.fmtId(template_name),
                         std.zig.fmtId(opcodes_name),
-                        frag_info.first,
+                        frag_info.first_instruction,
                         std.zig.fmtId(operands_name),
-                        frag_info.first,
+                        frag_info.first_instruction,
                     });
                 } else {
                     try out.print("    pub const {}: Template = .{{ .opcodes = data.{}[{}..{}], .operands = data.{}[{}..].ptr, .literal_data = data.strings }};\n", .{
                         std.zig.fmtId(template_name),
                         std.zig.fmtId(opcodes_name),
-                        frag_info.first,
-                        frag_info.first + frag_info.len,
+                        frag_info.first_instruction,
+                        frag_info.first_instruction + frag_info.instruction_count,
                         std.zig.fmtId(operands_name),
-                        frag_info.first,
+                        frag_info.first_instruction,
                     });
                 }
             }
@@ -248,8 +248,10 @@ pub fn main() !void {
 
         try dw.print("\"{s}\":", .{ out_path });
 
-        for (Resource_File.cache.?.files.values()) |file| {
-            try dw.print(" \"{s}\"", .{ file.realpath });
+        for (cache.files.values()) |file| {
+            if (std.mem.indexOfScalar(u8, file.realpath, '#') == null) {
+                try dw.print(" \"{s}\"", .{ file.realpath });
+            }
         }
     }
 }

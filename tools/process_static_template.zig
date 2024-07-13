@@ -4,11 +4,11 @@
 pub fn main() !void {
     defer std.debug.assert(.ok == gpa.deinit());
     
-    Resource_File.cache = .{
+    var cache: Resource_File.Cache = .{
         .arena = arena.allocator(),
         .gpa = gpa.allocator(),
     };
-    defer Resource_File.cache.?.deinit();
+    defer cache.deinit();
 
     var arg_iter = try std.process.argsWithAllocator(gpa.allocator());
     defer arg_iter.deinit();
@@ -27,12 +27,13 @@ pub fn main() !void {
             try template_extensions.append(ext);
         } else {
             const path = try arena.allocator().dupe(u8, arg);
-            try Resource_File.cache.?.add_dir(path, template_extensions.items);
+            try cache.add_dir(path, template_extensions.items);
             template_extensions.clearRetainingCapacity();
         }
     }
 
     var in_file: Resource_File = .{
+        .cache = &cache,
         .realpath = in_path,
         .source = .{
             .template = try zkittle.Source.init_file(arena.allocator(), std.fs.cwd(), in_path),
@@ -51,8 +52,10 @@ pub fn main() !void {
     var dw = depfile.writer();
     try dw.print("\"{s}\":", .{ out_path });
 
-    for (Resource_File.cache.?.files.values()) |file| {
-        try dw.print(" \"{s}\"", .{ file.realpath });
+    for (cache.files.values()) |file| {
+        if (std.mem.indexOfScalar(u8, file.realpath, '#') == null) {
+            try dw.print(" \"{s}\"", .{ file.realpath });
+        }
     }
 }
 

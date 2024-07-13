@@ -1,6 +1,7 @@
+cache: *Cache,
 realpath: []const u8,
 source: union (enum) {
-    template: zkittle.Source,
+    template: Template.Source,
     raw: []const u8,
 },
 output: ?[]const u8 = null,
@@ -12,7 +13,6 @@ const Resource_File = @This();
 pub const Hash = std.crypto.hash.sha2.Sha256;
 pub const Digest = [Hash.digest_length]u8;
 
-pub var cache: ?Cache = null; // TODO zkittle parser callbacks should support user data to avoid needing this to be global
 pub const Cache = struct {
     arena: std.mem.Allocator,
     gpa: std.mem.Allocator,
@@ -43,6 +43,57 @@ pub const Cache = struct {
     pub fn get(self: *Cache, path: []const u8) !*Resource_File {
         if (self.files.get(path)) |file| return file;
 
+        if (std.mem.indexOfScalar(u8, path, '#')) |frag_start| {
+            const base_file = try self.get(path[0..frag_start]);
+            const frag = path[frag_start + 1 ..];
+
+            const source = switch (base_file.source) {
+                .template => |src| src,
+                .raw => return error.PathIsNotTemplate,
+            };
+
+            var temp = std.ArrayList(u8).init(self.gpa);
+            defer temp.deinit();
+
+            var parser: Template.Parser = .{
+                .gpa = self.gpa,
+                .callback_context = null,
+                .include_callback = template_include,
+                .resource_callback = template_resource,
+            };
+            defer parser.deinit();
+
+            try parser.append(source);
+
+            if (parser.fragments.get(frag)) |frag_info| {
+                const content = try std.fmt.allocPrint(self.arena, "\\\\{s}", .{ frag_info.content });
+                errdefer self.arena.free(content);
+
+                var tokens = try Template.Token.lex(self.arena, content);
+                errdefer tokens.deinit(self.arena);
+
+                const realpath = try std.fmt.allocPrint(self.arena, "{s}#{s}", .{ base_file.realpath, frag });
+                errdefer self.arena.free(realpath);
+
+                const path_copy = try self.arena.dupe(u8, path);
+                const file = try self.arena.create(Resource_File);
+                file.* = .{
+                    .cache = self,
+                    .realpath = realpath,
+                    .source = .{ .template = .{
+                        .path = realpath,
+                        .source = content,
+                        .tokens = tokens,
+                    }},
+                };
+
+                try self.files.put(self.gpa, path_copy, file);
+                return file;
+            }
+            
+            return error.InvalidTemplateFragment;
+        }
+
         const ext = std.fs.path.extension(path);
 
         for (self.include_dirs.items) |dir_info| {
@@ -68,21 +119,22 @@ pub const Cache = struct {
             const file = try self.arena.create(Resource_File);
 
             if (is_template) {
-                const tokens = try zkittle.Token.lex(self.arena, source);
-                const hash = std.hash.Wyhash.hash(0, source);
+                const tokens = try Template.Token.lex(self.arena, source);
                 file.* = .{
+                    .cache = self,
                     .realpath = realpath,
                     .source = .{ .template = .{
                         .path = realpath,
                         .source = source,
                         .tokens = tokens,
-                        .hash = hash,
                     }},
                 };
             } else {
                 file.* = .{
+                    .cache = self,
                     .realpath = realpath,
                     .source = .{ .raw = source },
+                    .output = source,
                 };
             }
 
@@ -103,8 +155,9 @@ pub fn compute_output(self: *Resource_File, allocator: std.mem.Allocator) ![]con
             var temp = std.ArrayList(u8).init(allocator);
             defer temp.deinit();
 
-            var parser: zkittle.Parser = .{
+            var parser: Template.Parser = .{
                 .gpa = allocator,
+                .callback_context = self.cache,
                 .include_callback = template_include,
                 .resource_callback = template_resource,
             };
@@ -116,9 +169,12 @@ pub fn compute_output(self: *Resource_File, allocator: std.mem.Allocator) ![]con
             defer template.deinit(allocator);
 
             const writer = temp.writer();
-            try template.render(writer.any(), {}, .{ .escape_fn = zkittle.escape.none });
-
-            break :output try temp.toOwnedSlice();
+            try template.render(writer.any(), {}, .{ .escape_fn = Template.escape.none });
+            const output = try temp.toOwnedSlice();
+            var digest: Digest = undefined;
+            Hash.hash(output, &digest, .{});
+            self.digest = digest;
+            break :output output;
         },
     };
 
@@ -136,8 +192,9 @@ pub fn compute_digest(self: *Resource_File, temp: std.mem.Allocator) !Digest {
             Hash.hash(data, &hash, .{});
         },
         .template => |source| {
-            var parser: zkittle.Parser = .{
+            var parser: Template.Parser = .{
                 .gpa = temp,
+                .callback_context = self.cache,
                 .include_callback = template_include,
                 .resource_callback = template_resource,
             };
@@ -150,7 +207,7 @@ pub fn compute_digest(self: *Resource_File, temp: std.mem.Allocator) !Digest {
 
             var hasher = Hash.init(.{});
             const writer = hasher.writer();
-            try template.render(writer.any(), {}, .{ .escape_fn = zkittle.escape.none });
+            try template.render(writer.any(), {}, .{ .escape_fn = Template.escape.none });
             hasher.final(&hash);
         },
     }
@@ -168,20 +225,44 @@ pub fn compute_http_path(self: *Resource_File, arena: std.mem.Allocator, temp: s
     return path;
 }
 
-pub fn template_include(raw_path: []const u8) anyerror!zkittle.Source {
-    const c = &(cache orelse return error.CacheNotInitialized);
-    const file = try c.get(raw_path);
+const empty_token_data: [4]u64 = .{ 0, 0, 0, 0 };
+const empty_tokens: Template.Token.List = .{
+    .bytes = @constCast(@ptrCast(&empty_token_data)),
+    .len = 1,
+    .capacity = 1,
+};
+
+pub fn template_include(p: *Template.Parser, raw_path: []const u8) anyerror!Template.Source {
+    const c: *Cache = @alignCast(@ptrCast(p.callback_context orelse return .{
+        .path = "",
+        .source = "",
+        .tokens = empty_tokens,
+    }));
+
+    var full_path = raw_path;
+    var path_buf_frag: [std.fs.MAX_PATH_BYTES + 100]u8 = undefined;
+    if (std.mem.startsWith(u8, raw_path, "#")) {
+        var base = p.include_stack.getLast().path;
+        if (std.mem.indexOfScalar(u8, base, '#')) |frag_start| {
+            base = base[0..frag_start];
+        }
+        full_path = try std.fmt.bufPrint(&path_buf_frag, "{s}{s}", .{ base, raw_path });
+    }
+
+    std.debug.print("including {s}\n", .{ full_path });
+
+    const file = try c.get(full_path);
     return switch (file.source) {
         .template => |source| source,
         else => error.NotATemplate,
     };
 }
 
-pub fn template_resource(raw_path: []const u8) anyerror![]const u8 {
-    const c = &(cache orelse return error.CacheNotInitialized);
+pub fn template_resource(p: *Template.Parser, raw_path: []const u8) anyerror![]const u8 {
+    const c: *Cache = @alignCast(@ptrCast(p.callback_context orelse return ""));
     const file = try c.get(raw_path);
     return try file.compute_http_path(c.arena, c.gpa);
 }
 
-const zkittle = @import("zkittle");
+const Template = @import("zkittle");
 const std = @import("std");
