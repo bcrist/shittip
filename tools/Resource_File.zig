@@ -225,11 +225,9 @@ pub fn compute_http_path(self: *Resource_File, arena: std.mem.Allocator, temp: s
     return path;
 }
 
-const empty_token_data: [4]u64 = .{ 0, 0, 0, 0 };
 const empty_tokens: Template.Token.List = .{
-    .bytes = @constCast(@ptrCast(&empty_token_data)),
-    .len = 1,
-    .capacity = 1,
+    .kinds = &.{ .eof },
+    .spans = @as([]const []const u8, &.{ "" }).ptr,
 };
 
 pub fn template_include(p: *Template.Parser, raw_path: []const u8) anyerror!Template.Source {
@@ -248,8 +246,6 @@ pub fn template_include(p: *Template.Parser, raw_path: []const u8) anyerror!Temp
         }
         full_path = try std.fmt.bufPrint(&path_buf_frag, "{s}{s}", .{ base, raw_path });
     }
-
-    std.debug.print("including {s}\n", .{ full_path });
 
     const file = try c.get(full_path);
     return switch (file.source) {
