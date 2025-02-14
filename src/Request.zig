@@ -415,7 +415,7 @@ pub fn format_err_response(options: Respond_Err_Options) ![]const u8 {
     if (options.trace) |ert| {
         try w.writeAll("<pre>\n");
         const debug_info = try std.debug.getSelfDebugInfo();
-        try std.debug.writeStackTrace(ert.*, w, alloc, debug_info, .no_color);
+        try std.debug.writeStackTrace(ert.*, w, debug_info, .no_color);
         try w.writeAll("</pre>\n");
     }
 

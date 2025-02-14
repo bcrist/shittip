@@ -1,19 +1,19 @@
 .{
     .name = "shittip_demo",
     .version = "0.0.0",
-    .minimum_zig_version = "0.12.0",
+    .minimum_zig_version = "0.14.0-dev.3217+5b9b5e45c",
     .paths = .{""},
     .dependencies = .{
         .shittip = .{
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://github.com/bcrist/tempora#7888819f0a6be6701ceb424da8be028a93ddce7b",
-            .hash = "12200bc6c461d37080fc75641afadd97dc709561828da66d3f0b54e5e0330308525e",
+            .url = "git+https://github.com/bcrist/tempora#3fcbad9684516f60b931940beef486433fba8465",
+            .hash = "12200a7c618dce56ad05523b4670c4b4e1d59ba6fc8620284bf9fa64ffe98ac7af99",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle#e179a48840399c9eccce5a76096120e4b067dc4c",
-            .hash = "12202874a7727f8589b7703a2a037d96877fbf2bd67a4520fffa8fbb57e43d406d2b",
+            .url = "git+https://github.com/bcrist/zkittle#7d4c4940697bd8ad0e475a501aeaced7522924ef",
+            .hash = "122047031fa08f5b1668851ee9ad6999b055aff4bb4fbaa49b5bf7624f6fce0d896f",
         },
     },
 }

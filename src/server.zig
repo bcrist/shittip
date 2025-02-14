@@ -136,8 +136,8 @@ pub fn Server(comptime Injector: type) type {
                 });
 
                 const timeout: std.posix.timeval = .{
-                    .tv_sec = self.receive_timeout_seconds,
-                    .tv_usec = 0,
+                    .sec = self.receive_timeout_seconds,
+                    .usec = 0,
                 };
                 std.posix.setsockopt(connection.stream.handle, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, std.mem.asBytes(&timeout)) catch |err| {
                     log.warn("C{}: Failed to set socket receive timeout: {}", .{ connection_num, err });

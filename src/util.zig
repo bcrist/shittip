@@ -1,12 +1,12 @@
 pub inline fn maybe_string(ptr: anytype) ?[]const u8 {
     switch (@typeInfo(@TypeOf(ptr.*))) {
-        .Pointer => |info| {
-            if (info.child == u8 and info.size == .Slice) {
+        .pointer => |info| {
+            if (info.child == u8 and info.size == .slice) {
                 return ptr.*;
             }
-            if (info.size == .One) {
+            if (info.size == .one) {
                 switch (@typeInfo(info.child)) {
-                    .Array => |array_info| {
+                    .array => |array_info| {
                         if (array_info.child == u8) {
                             return ptr.*;
                         }
@@ -15,7 +15,7 @@ pub inline fn maybe_string(ptr: anytype) ?[]const u8 {
                 }
             }
         },
-        .Array => |array_info| {
+        .array => |array_info| {
             if (array_info.child == u8) {
                 return ptr;
             }

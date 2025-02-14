@@ -225,20 +225,21 @@ pub fn compute_http_path(self: *Resource_File, arena: std.mem.Allocator, temp: s
     return path;
 }
 
+const empty_source: []const u8 = "";
 const empty_tokens: Template.Token.List = .{
     .kinds = &.{ .eof },
-    .spans = @as([]const []const u8, &.{ "" }).ptr,
+    .spans = @as([]const []const u8, &.{ empty_source }).ptr,
 };
 
 pub fn template_include(p: *Template.Parser, raw_path: []const u8) anyerror!Template.Source {
     const c: *Cache = @alignCast(@ptrCast(p.callback_context orelse return .{
         .path = "",
-        .source = "",
+        .source = empty_source,
         .tokens = empty_tokens,
     }));
 
     var full_path = raw_path;
-    var path_buf_frag: [std.fs.MAX_PATH_BYTES + 100]u8 = undefined;
+    var path_buf_frag: [std.fs.max_path_bytes + 100]u8 = undefined;
     if (std.mem.startsWith(u8, raw_path, "#")) {
         var base = p.include_stack.getLast().path;
         if (std.mem.indexOfScalar(u8, base, '#')) |frag_start| {

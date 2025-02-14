@@ -73,8 +73,8 @@ pub fn main() !void {
 
             const source = try Template.Source.init_file(arena.allocator(), template_dir, entry.path);
 
-            var path_buf: [std.fs.MAX_PATH_BYTES + 100]u8 = undefined;
-            var path_buf_frag: [std.fs.MAX_PATH_BYTES + 100]u8 = undefined;
+            var path_buf: [std.fs.max_path_bytes + 100]u8 = undefined;
+            var path_buf_frag: [std.fs.max_path_bytes + 100]u8 = undefined;
             const operands_name = try std.fmt.bufPrint(&path_buf, "{s}.operand", .{ entry.path });
             const opcodes_name = operands_name[0 .. operands_name.len - "erand".len];
             const base_path = operands_name[0 .. operands_name.len - ".operand".len];
@@ -195,7 +195,7 @@ pub fn main() !void {
             defer f.close();
             const r = f.reader();
 
-            var unix_path_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+            var unix_path_buf: [std.fs.max_path_bytes]u8 = undefined;
             var unix_path_stream = std.io.fixedBufferStream(&unix_path_buf);
             try r.streamUntilDelimiter(unix_path_stream.writer(), '\n', null);
             const unix_path = unix_path_stream.getWritten();

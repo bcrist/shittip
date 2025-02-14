@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const ext = .{
         .Temp_Allocator = b.dependency("Temp_Allocator", .{}).module("Temp_Allocator"),
-        .fmt = b.dependency("fmtHelper", .{}).module("fmt"),
+        .fmt = b.dependency("fmt_helper", .{}).module("fmt"),
         .tempora = b.dependency("tempora", .{}).module("tempora"),
         .dizzy = b.dependency("dizzy", .{}).module("dizzy"),
         .zkittle = b.dependency("zkittle", .{}).module("zkittle"),
@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) void {
         const process_static_template_exe = b.addExecutable(.{
             .name = "process_static_template" ++ suffix,
             .root_source_file = b.path("tools/process_static_template.zig"),
-            .target = b.host,
+            .target = b.graph.host,
             .optimize = mode,
         });
         process_static_template_exe.root_module.addImport("zkittle", ext.zkittle);
@@ -49,7 +49,7 @@ pub fn build(b: *std.Build) void {
         const hash_file_exe = b.addExecutable(.{
             .name = "hash_file" ++ suffix,
             .root_source_file = b.path("tools/hash_file.zig"),
-            .target = b.host,
+            .target = b.graph.host,
             .optimize = mode,
         });
         b.installArtifact(hash_file_exe);
@@ -57,7 +57,7 @@ pub fn build(b: *std.Build) void {
         const generate_res_exe = b.addExecutable(.{
             .name = "generate_res" ++ suffix,
             .root_source_file = b.path("tools/generate_res.zig"),
-            .target = b.host,
+            .target = b.graph.host,
             .optimize = mode,
         });
         generate_res_exe.root_module.addImport("tempora", ext.tempora);
