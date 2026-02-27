@@ -1,19 +1,20 @@
 .{
-    .name = "shittip_demo",
+    .name = .shittip_demo,
+    .fingerprint = 0x32f89c4ef259420e,
     .version = "0.0.0",
-    .minimum_zig_version = "0.14.0-dev.3217+5b9b5e45c",
+    .minimum_zig_version = "0.16.0-dev.2626+0e3c6514a",
     .paths = .{""},
     .dependencies = .{
         .shittip = .{
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://github.com/bcrist/tempora#3fcbad9684516f60b931940beef486433fba8465",
-            .hash = "12200a7c618dce56ad05523b4670c4b4e1d59ba6fc8620284bf9fa64ffe98ac7af99",
+            .url = "git+https://github.com/bcrist/tempora?ref=zig-0.16#baa534827ede34455deeade60ff2d520b65bc6b1",
+            .hash = "tempora-0.5.0-GTyeDYHxCAAKHR0LiM1jOKPYq49OwP7-0s_0Y_seKuRQ",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle#7d4c4940697bd8ad0e475a501aeaced7522924ef",
-            .hash = "122047031fa08f5b1668851ee9ad6999b055aff4bb4fbaa49b5bf7624f6fce0d896f",
+            .url = "git+https://github.com/bcrist/zkittle?ref=zig-0.16#1f4e33ba10cb30ccbe3a4abf2e414b36370708ea",
+            .hash = "zkittle-0.1.0-Nt34TLBKAQDW9wfbNljpZockKeRNS3jyk1ud3Xh2ydfM",
         },
     },
 }

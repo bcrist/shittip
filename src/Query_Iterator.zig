@@ -1,3 +1,4 @@
+allocator: std.mem.Allocator,
 temp: std.ArrayList(u8),
 inner: std.mem.SplitIterator(u8, .scalar),
 
@@ -8,7 +9,8 @@ pub const Query_Param = @import("Query_Param.zig");
 pub fn init(allocator: std.mem.Allocator, query: []const u8) Query_Iterator {
     const params = if (std.mem.startsWith(u8, query, "?")) query[1..] else query;
     return .{
-        .temp = std.ArrayList(u8).init(allocator),
+        .allocator = allocator,
+        .temp = .empty,
         .inner = std.mem.splitScalar(u8, params, '&'),
     };
 }
@@ -19,7 +21,7 @@ pub fn reset(self: *Query_Iterator) void {
 }
 
 pub fn deinit(self: *Query_Iterator) void {
-    self.temp.deinit();
+    self.temp.deinit(self.allocator);
 }
 
 pub fn next(self: *Query_Iterator) !?Query_Param {
@@ -28,8 +30,8 @@ pub fn next(self: *Query_Iterator) !?Query_Param {
 
         self.temp.clearRetainingCapacity();
         if (std.mem.indexOfScalar(u8, entry, '=')) |end_of_name| {
-            var name = try percent_encoding.decode_maybe_append(&self.temp, entry[0..end_of_name], .{});
-            const value = try percent_encoding.decode_maybe_append(&self.temp, entry[end_of_name + 1 ..], .{});
+            var name = try percent_encoding.decode_maybe_append(&self.temp, entry[0..end_of_name], .default);
+            const value = try percent_encoding.decode_maybe_append(&self.temp, entry[end_of_name + 1 ..], .default);
             if (name.ptr != entry.ptr) {
                 // decoding `value` may have enlarged self.temp.items, causing its address to change
                 name.ptr = self.temp.items.ptr;
@@ -40,7 +42,7 @@ pub fn next(self: *Query_Iterator) !?Query_Param {
             };
         } else {
             return .{
-                .name = try percent_encoding.decode_maybe_append(&self.temp, entry, .{}),
+                .name = try percent_encoding.decode_maybe_append(&self.temp, entry, .default),
                 .value = null,
             };
         }

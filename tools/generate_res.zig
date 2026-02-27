@@ -1,16 +1,19 @@
 /// usage:
 ///    generate_res <templates_dir> <metadata_dir> <output_file> <template_string_data_output_file> <depfile_path> [[-t <extension>]... <search_path>]...
 
-pub fn main() !void {
-    defer std.debug.assert(.ok == gpa.deinit());
+pub fn main(init: std.process.Init) !void {
+    var stderr_buf: [64]u8 = undefined;
+    var stderr = std.Io.File.stderr().writer(init.io, &stderr_buf);
 
     var cache: Resource_File.Cache = .{
-        .arena = arena.allocator(),
-        .gpa = gpa.allocator(),
+        .arena = init.arena.allocator(),
+        .gpa = init.gpa,
+        .io = init.io,
+        .diagnostic_writer = &stderr.interface,
     };
     defer cache.deinit();
 
-    var arg_iter = try std.process.argsWithAllocator(gpa.allocator());
+    var arg_iter = try init.minimal.args.iterateAllocator(init.gpa);
     defer arg_iter.deinit();
 
     _ = arg_iter.next(); // exe name
@@ -19,27 +22,29 @@ pub fn main() !void {
     const out_path = arg_iter.next() orelse return error.ExpectedOutputPath;
     const template_string_data_out_path = arg_iter.next() orelse return error.ExpectedTemplateStringDataOutputPath;
     const depfile_path = arg_iter.next() orelse return error.ExpectedDepfilePath;
-    
-    var template_extensions = std.ArrayList([]const u8).init(gpa.allocator());
-    defer template_extensions.deinit();
+
+    var template_extensions: std.ArrayList([]const u8) = .empty;
+    defer template_extensions.deinit(init.gpa);
 
     while (arg_iter.next()) |arg| {
         if (std.mem.eql(u8, arg, "-t")) {
-            const ext = try arena.allocator().dupe(u8, arg_iter.next() orelse return error.ExpectedTemplateExtension);
-            try template_extensions.append(ext);
+            const ext = arg_iter.next() orelse return error.ExpectedTemplateExtension;
+            try template_extensions.append(init.gpa, ext);
         } else {
-            const path = try arena.allocator().dupe(u8, arg);
-            try cache.add_dir(path, template_extensions.items);
+            try cache.add_dir(arg, template_extensions.items);
             template_extensions.clearRetainingCapacity();
         }
     }
 
-    const out_file = try std.fs.cwd().createFile(out_path, .{});
-    defer out_file.close();
-    var out = out_file.writer();
+    const out_file = try std.Io.Dir.cwd().createFile(init.io, out_path, .{});
+    defer out_file.close(init.io);
 
-    var temp = std.ArrayList(u8).init(gpa.allocator());
-    defer temp.deinit();
+    var out_buf: [8192]u8 = undefined;
+    var out_writer = out_file.writer(init.io, &out_buf);
+    var out = &out_writer.interface;
+
+    var temp: std.ArrayList(u8) = .empty;
+    defer temp.deinit(init.gpa);
 
     { // Templates
         try out.print(
@@ -50,31 +55,33 @@ pub fn main() !void {
             \\
             \\pub const templates = struct {{
             \\
-            , .{ std.time.timestamp() });
+            , .{ std.Io.Clock.real.now(init.io).toSeconds() });
 
         var parser: Template.Parser = .{
-            .gpa = gpa.allocator(),
+            .gpa = init.gpa,
             .callback_context = &cache,
             .include_callback = Resource_File.template_include,
             .resource_callback = Resource_File.template_resource,
+            .diagnostic_writer = &stderr.interface,
         };
         defer parser.deinit();
 
-        var tw = temp.writer();
+        var temp_writer = std.Io.Writer.Allocating.fromArrayList(init.gpa, &temp);
+        const tw = &temp_writer.writer;
         
-        var template_dir = try std.fs.cwd().openDir(template_dir_path, .{ .iterate = true });
-        defer template_dir.close();
+        var template_dir = try std.Io.Dir.cwd().openDir(init.io, template_dir_path, .{ .iterate = true });
+        defer template_dir.close(init.io);
 
-        var walker = try template_dir.walk(gpa.allocator());
+        var walker = try template_dir.walk(init.gpa);
         defer walker.deinit();
 
-        while (try walker.next()) |entry| {
+        while (try walker.next(init.io)) |entry| {
             if (entry.kind != .file) continue;
 
-            const source = try Template.Source.init_file(arena.allocator(), template_dir, entry.path);
+            const source = try Template.Source.init_file(init.arena.allocator(), init.io, template_dir, entry.path);
 
-            var path_buf: [std.fs.max_path_bytes + 100]u8 = undefined;
-            var path_buf_frag: [std.fs.max_path_bytes + 100]u8 = undefined;
+            var path_buf: [std.Io.Dir.max_path_bytes + 100]u8 = undefined;
+            var path_buf_frag: [std.Io.Dir.max_path_bytes + 100]u8 = undefined;
             const operands_name = try std.fmt.bufPrint(&path_buf, "{s}.operand", .{ entry.path });
             const opcodes_name = operands_name[0 .. operands_name.len - "erand".len];
             const base_path = operands_name[0 .. operands_name.len - ".operand".len];
@@ -87,7 +94,7 @@ pub fn main() !void {
                 const frag_suffix = try std.fmt.bufPrint(path_buf_frag[base_path.len..], "#{s}", .{ frag_name });
                 const template_name = path_buf_frag[0 .. base_path.len + frag_suffix.len];
                 if (frag_info.first_instruction + frag_info.instruction_count >= parser.instructions.len) {
-                    try out.print("    pub const {}: Template = .{{ .opcodes = data.{}[{}..], .operands = data.{}[{}..].ptr, .literal_data = data.strings }};\n", .{
+                    try out.print("    pub const {f}: Template = .{{ .opcodes = data.{f}[{d}..], .operands = data.{f}[{d}..].ptr, .literal_data = data.strings }};\n", .{
                         std.zig.fmtId(template_name),
                         std.zig.fmtId(opcodes_name),
                         frag_info.first_instruction,
@@ -95,7 +102,7 @@ pub fn main() !void {
                         frag_info.first_instruction,
                     });
                 } else {
-                    try out.print("    pub const {}: Template = .{{ .opcodes = data.{}[{}..{}], .operands = data.{}[{}..].ptr, .literal_data = data.strings }};\n", .{
+                    try out.print("    pub const {f}: Template = .{{ .opcodes = data.{f}[{d}..{d}], .operands = data.{f}[{d}..].ptr, .literal_data = data.strings }};\n", .{
                         std.zig.fmtId(template_name),
                         std.zig.fmtId(opcodes_name),
                         frag_info.first_instruction,
@@ -106,17 +113,17 @@ pub fn main() !void {
                 }
             }
 
-            var template = try parser.finish(gpa.allocator(), false);
-            defer template.deinit(gpa.allocator());
+            var template = try parser.finish(init.gpa, false);
+            defer template.deinit(init.gpa);
 
-            try out.print("    pub const {}: Template = .{{ .opcodes = data.{}, .operands = data.{}.ptr, .literal_data = data.strings }};\n", .{
+            try out.print("    pub const {f}: Template = .{{ .opcodes = data.{f}, .operands = data.{f}.ptr, .literal_data = data.strings }};\n", .{
                 std.zig.fmtId(base_path),
                 std.zig.fmtId(opcodes_name),
                 std.zig.fmtId(operands_name),
             });
 
 
-            try tw.print("\n        pub const {}: []const Template.Opcode = @ptrCast(&[_]u8 {{", .{
+            try tw.print("\n        pub const {f}: []const Template.Opcode = @ptrCast(&[_]u8 {{", .{
                 std.zig.fmtId(opcodes_name),
             });
 
@@ -134,7 +141,7 @@ pub fn main() !void {
                 try tw.print("{},", .{ @intFromEnum(word) });
             }
 
-            try tw.print("\n        }});\n        pub const {}: []const Template.Operands = @ptrCast(&[_]u32 {{", .{
+            try tw.print("\n        }});\n        pub const {f}: []const Template.Operands = @ptrCast(&[_]u32 {{", .{
                 std.zig.fmtId(operands_name),
             });
 
@@ -160,7 +167,7 @@ pub fn main() !void {
             \\        const strings = @embedFile("template_string_data");
             \\
         );
-        try out.writeAll(temp.items);
+        try out.writeAll(temp_writer.written());
         try out.writeAll(
             \\    };
             \\};
@@ -168,66 +175,75 @@ pub fn main() !void {
             \\
         );
 
-        try std.fs.cwd().writeFile(.{
+        try std.Io.Dir.cwd().writeFile(init.io, .{
             .sub_path = template_string_data_out_path,
             .data = parser.literal_data.items,
         });
+
+        temp = temp_writer.toArrayList();
     }
 
     temp.clearRetainingCapacity();
 
     { // Hashed resources
-        var hash_dedup = std.StringHashMap([]const u8).init(gpa.allocator());
-        defer hash_dedup.deinit();
+        var hash_dedup: std.StringHashMapUnmanaged([]const u8) = .empty;
+        defer hash_dedup.deinit(init.gpa);
 
-        var metadata_dir = try std.fs.cwd().openDir(metadata_dir_path, .{ .iterate = true });
-        defer metadata_dir.close();
+        var metadata_dir = try std.Io.Dir.cwd().openDir(init.io, metadata_dir_path, .{ .iterate = true });
+        defer metadata_dir.close(init.io);
 
-        var walker = try metadata_dir.walk(gpa.allocator());
+        var walker = try metadata_dir.walk(init.gpa);
         defer walker.deinit();
 
-        var tw = temp.writer();
+        var temp_writer = std.Io.Writer.Allocating.fromArrayList(init.gpa, &temp);
+        const tw = &temp_writer.writer;
 
-        while (try walker.next()) |entry| {
+        while (try walker.next(init.io)) |entry| {
             if (entry.kind != .file) continue;
 
-            const f = try metadata_dir.openFile(entry.path, .{});
-            defer f.close();
-            const r = f.reader();
+            const f = try metadata_dir.openFile(init.io, entry.path, .{});
+            defer f.close(init.io);
+
+            var buf: [16384]u8 = undefined;
+            var reader = f.reader(init.io, &buf);
+            const r = &reader.interface;
 
             var unix_path_buf: [std.fs.max_path_bytes]u8 = undefined;
-            var unix_path_stream = std.io.fixedBufferStream(&unix_path_buf);
-            try r.streamUntilDelimiter(unix_path_stream.writer(), '\n', null);
-            const unix_path = unix_path_stream.getWritten();
+            var unix_path_writer = std.Io.Writer.fixed(&unix_path_buf);
+            _ = try r.streamDelimiter(&unix_path_writer, '\n');
+            const unix_path = unix_path_writer.buffered();
             std.mem.replaceScalar(u8, unix_path, '\\', '/');
+            r.toss(1); // \n
 
             var compressed_file_path_buf: [256]u8 = undefined;
-            var compressed_file_path_stream = std.io.fixedBufferStream(&compressed_file_path_buf);
-            try r.streamUntilDelimiter(compressed_file_path_stream.writer(), '\n', null);
+            var compressed_file_path_writer = std.Io.Writer.fixed(&compressed_file_path_buf);
+            _ = try r.streamDelimiter(&compressed_file_path_writer, '\n');
+            r.toss(1); // \n
 
             var hash_buf: [@sizeOf(Resource_File.Digest) * 2]u8 = undefined;
-            var hash_stream = std.io.fixedBufferStream(&hash_buf);
-            try r.streamUntilDelimiter(hash_stream.writer(), '\n', null);
+            var hash_writer = std.Io.Writer.fixed(&hash_buf);
+            _ = try r.streamDelimiter(&hash_writer, '\n');
+            r.toss(1); // \n
 
-            const gop = try hash_dedup.getOrPut(hash_stream.getWritten());
+            const gop = try hash_dedup.getOrPut(init.gpa, hash_writer.buffered());
             if (gop.found_existing) {
-                try tw.print("    pub const {} = content.{};\n", .{
+                try tw.print("    pub const {f} = content.{f};\n", .{
                     std.zig.fmtId(unix_path),
                     std.zig.fmtId(gop.value_ptr.*),
                 });
             } else {
-                gop.key_ptr.* = try arena.allocator().dupe(u8, hash_stream.getWritten());
-                gop.value_ptr.* = try arena.allocator().dupe(u8, unix_path);
+                gop.key_ptr.* = try init.arena.allocator().dupe(u8, hash_writer.buffered());
+                gop.value_ptr.* = try init.arena.allocator().dupe(u8, unix_path);
 
-                try tw.print("    pub const {} = @embedFile(\"{}\");\n", .{
+                try tw.print("    pub const {f} = @embedFile(\"{f}\");\n", .{
                     std.zig.fmtId(unix_path),
-                    std.zig.fmtEscapes(compressed_file_path_stream.getWritten()),
+                    std.zig.fmtString(compressed_file_path_writer.buffered()),
                 });
             }
 
-            try out.print("pub const {} = \"{s}\";\n", .{
+            try out.print("pub const {f} = \"{s}\";\n", .{
                 std.zig.fmtId(unix_path),
-                hash_stream.getWritten(),
+                hash_writer.buffered(),
             });
         }
 
@@ -237,14 +253,19 @@ pub fn main() !void {
             \\pub const content = struct {
             \\
         );
-        try out.writeAll(temp.items);
+        try out.writeAll(temp_writer.written());
         try out.writeAll("};\n");
+
+        temp = temp_writer.toArrayList();
     }
 
     { // Depfile
-        const depfile = try std.fs.cwd().createFile(depfile_path, .{});
-        defer depfile.close();
-        var dw = depfile.writer();
+        const depfile = try std.Io.Dir.cwd().createFile(init.io, depfile_path, .{});
+        defer depfile.close(init.io);
+
+        var buf: [8192]u8 = undefined;
+        var depfile_writer = depfile.writer(init.io, &buf);
+        const dw = &depfile_writer.interface;
 
         try dw.print("\"{s}\":", .{ out_path });
 
@@ -253,11 +274,14 @@ pub fn main() !void {
                 try dw.print(" \"{s}\"", .{ file.realpath });
             }
         }
-    }
-}
 
-var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
-var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        try dw.flush();
+    }
+
+    try out.flush();
+
+    try stderr.interface.flush();
+}
 
 const Resource_File = @import("Resource_File.zig");
 const Template = @import("zkittle");

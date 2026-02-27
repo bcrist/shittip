@@ -12,23 +12,28 @@ pub fn build(b: *std.Build) void {
 
     const http = b.addModule("http", .{
         .root_source_file = b.path("src/http.zig"),
+        .imports = &.{
+            .{ .name = "Temp_Allocator", .module = ext.Temp_Allocator },
+            .{ .name = "fmt", .module = ext.fmt },
+            .{ .name = "tempora", .module = ext.tempora },
+            .{ .name = "dizzy", .module = ext.dizzy },
+            .{ .name = "zkittle", .module = ext.zkittle },
+            .{ .name = "percent_encoding", .module = ext.percent_encoding },
+        },
     });
-    http.addImport("Temp_Allocator", ext.Temp_Allocator);
-    http.addImport("fmt", ext.fmt);
-    http.addImport("tempora", ext.tempora);
-    http.addImport("dizzy", ext.dizzy);
-    http.addImport("zkittle", ext.zkittle);
-    http.addImport("percent_encoding", ext.percent_encoding);
 
     const tests = b.addTest(.{
-        .root_source_file = b.path("test.zig"),
-        .optimize = b.standardOptimizeOption(.{}),
-        .target = b.standardTargetOptions(.{}),
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("test.zig"),
+            .optimize = b.standardOptimizeOption(.{}),
+            .target = b.standardTargetOptions(.{}),
+            .imports = &.{
+                .{ .name = "http", .module = http },
+            },
+        }),
     });
-    tests.root_module.addImport("http", http);
-    const run_tests = b.addRunArtifact(tests);
-    const test_step = b.step("test", "Run all tests");
-    test_step.dependOn(&run_tests.step);
+    b.step("test", "Run all tests").dependOn(&b.addRunArtifact(tests).step);
+    b.installArtifact(tests);
 
     inline for ([_]std.builtin.OptimizeMode { .Debug, .ReleaseFast }) |mode| {
         const suffix = switch (mode) {
@@ -37,32 +42,39 @@ pub fn build(b: *std.Build) void {
             else => unreachable,
         };
 
-        const process_static_template_exe = b.addExecutable(.{
+        b.installArtifact(b.addExecutable(.{
             .name = "process_static_template" ++ suffix,
-            .root_source_file = b.path("tools/process_static_template.zig"),
-            .target = b.graph.host,
-            .optimize = mode,
-        });
-        process_static_template_exe.root_module.addImport("zkittle", ext.zkittle);
-        b.installArtifact(process_static_template_exe);
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("tools/process_static_template.zig"),
+                .target = b.graph.host,
+                .optimize = mode,
+                .imports = &.{
+                    .{ .name = "zkittle", .module = ext.zkittle },
+                },
+            }),
+        }));
 
-        const hash_file_exe = b.addExecutable(.{
+        b.installArtifact(b.addExecutable(.{
             .name = "hash_file" ++ suffix,
-            .root_source_file = b.path("tools/hash_file.zig"),
-            .target = b.graph.host,
-            .optimize = mode,
-        });
-        b.installArtifact(hash_file_exe);
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("tools/hash_file.zig"),
+                .target = b.graph.host,
+                .optimize = mode,
+            }),
+        }));
 
-        const generate_res_exe = b.addExecutable(.{
+        b.installArtifact(b.addExecutable(.{
             .name = "generate_res" ++ suffix,
-            .root_source_file = b.path("tools/generate_res.zig"),
-            .target = b.graph.host,
-            .optimize = mode,
-        });
-        generate_res_exe.root_module.addImport("tempora", ext.tempora);
-        generate_res_exe.root_module.addImport("zkittle", ext.zkittle);
-        b.installArtifact(generate_res_exe);
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("tools/generate_res.zig"),
+                .target = b.graph.host,
+                .optimize = mode,
+                .imports = &.{
+                    .{ .name = "tempora", .module = ext.tempora },
+                    .{ .name = "zkittle", .module = ext.zkittle },
+                },
+            }),
+        }));
     }
 }
 
@@ -85,13 +97,13 @@ pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_
     };
 
     for (paths) |path_options| {
-        var dir = b.build_root.handle.makeOpenPath(path_options.path, .{ .iterate = true }) catch |err| report_path_err(b.allocator, path_options.path, err);
-        defer dir.close();
+        var dir = b.build_root.handle.createDirPathOpen(b.graph.io, path_options.path, .{ .open_options = .{ .iterate = true } }) catch |err| report_path_err(b.allocator, path_options.path, err);
+        defer dir.close(b.graph.io);
 
         var iter = dir.walk(b.allocator) catch @panic("OOM");
         defer iter.deinit();
 
-        while (iter.next() catch |err| report_path_err(b.allocator, path_options.path, err)) |entry| {
+        while (iter.next(b.graph.io) catch |err| report_path_err(b.allocator, path_options.path, err)) |entry| {
             if (entry.kind == .file or entry.kind == .sym_link) {
                 files.maybe_add(entry.path, path_options);
             }
@@ -148,7 +160,7 @@ pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_
     for (files.static_template_files.items) |entry| {
         const process = b.addRunArtifact(process_static_template_exe);
         process.addFileArg(b.path(entry.base).path(b, entry.subpath));
-        const template_out = process.addOutputFileArg(std.fs.path.basename(entry.subpath));
+        const template_out = process.addOutputFileArg(std.Io.Dir.path.basename(entry.subpath));
         _ = process.addDepFileOutputArg("deps.d");
         for (paths) |path_options| {
             for (path_options.static_template_extensions) |ext| {
@@ -192,7 +204,7 @@ const Resource_Files = struct {
 
     pub fn maybe_add(self: *Resource_Files, subpath: []const u8, options: Resource_Path) void {
         const owned_subpath = self.allocator.dupe(u8, subpath) catch @panic("OOM");
-        const ext = std.fs.path.extension(owned_subpath);
+        const ext = std.Io.Dir.path.extension(owned_subpath);
 
         for (options.ignored_extensions) |ignored_ext| {
             if (std.mem.eql(u8, ignored_ext, ext)) return;
