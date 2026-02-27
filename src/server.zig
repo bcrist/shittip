@@ -276,7 +276,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             }
         }
 
-        fn process_connection(self: *Self, cid: Connection_Id, stream: std.Io.net.Stream, request_timeout: ?std.Io.Duration) void {
+        fn process_connection(self: *Self, cid: Connection_Id, stream: std.Io.net.Stream, request_timeout: ?std.Io.Duration) std.Io.Cancelable!void {
             const io = self.loop.io;
             defer stream.close(io);
 
@@ -301,30 +301,30 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         log.info("{f}: [431] Expected request headers to be <= {B}", .{ cid, comptime_options.connection_read_buffer_bytes });
                         http_server.out.writeAll("HTTP/1.0 431 Request Header Fields Too Large\r\nconnection: close\r\ncontent-length: 0\r\n\r\n") catch |response_err| {
                             ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
-                            return;
+                            return ctx.propagate_cancel();
                         };
                         http_server.out.flush() catch |response_err| {
                             ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
-                            return;
+                            return ctx.propagate_cancel();
                         };
                         log.info("{f}: Closing connection (sent 431)", .{ cid });
-                        return;
+                        return ctx.propagate_cancel();
                     },
                     error.HttpHeadersInvalid => {
                         log.info("{f}: Closing connection (client sent invalid request)", .{ cid });
-                        return;
+                        return ctx.propagate_cancel();
                     },
                     error.HttpRequestTruncated => {
                         log.debug("{f}: Closing connection (client closed before finishing headers)", .{ cid });
-                        return;
+                        return ctx.propagate_cancel();
                     },
                     error.HttpConnectionClosing => {
                         log.debug("{f}: Closing connection normally (client closed first)", .{ cid });
-                        return;
+                        return ctx.propagate_cancel();
                     },
                     error.ReadFailed => {
                         ctx.log_error("Failed to read headers", err, @errorReturnTrace());
-                        return;
+                        return ctx.propagate_cancel();
                     },
                 };
 
@@ -333,16 +333,16 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 _ = timeout;
                 var proc = self.loop.io.concurrent(process_request, .{ self, ctx, request }) catch {
                     log.info("{f}: Closing connection (insufficient concurrency available)", .{ cid });
-                    return;
+                    return ctx.propagate_cancel();
                 };
-                proc.await(self.loop.io);
+                try proc.await(self.loop.io);
                 if (http_server.reader.state != .ready) {
                     log.info("{f}: Closing connection (handler failed)", .{ cid });
                 }
             }
         }
 
-        fn process_request(self: *Self, ctx: Handler_Context, req: std.http.Server.Request) void {
+        fn process_request(self: *Self, ctx: Handler_Context, req: std.http.Server.Request) std.Io.Cancelable!void {
             log.debug("{f}: {t} {s}", .{ ctx.cid, req.head.method, req.head.target });
             defer log.debug("{f}: Finished processing request", .{ ctx.cid });
 
@@ -418,13 +418,14 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             };
 
             request.handle(&self.injector_context, "") catch |err| {
-                if (err == error.Done) return;
+                try ctx.propagate_cancel();
+
                 if (status_from_error(err)) |status| {
                     request.maybe_respond_err(.{ .status = status }) catch |response_err| {
                         ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
                         ctx.server.reader.state = .closing;
                     };
-                } else {
+                } else if (err != error.Done) {
                     request.maybe_respond_err(switch (err) {
                         error.Canceled, error.InsufficientResources, error.OutOfMemory => .{
                             .status = .service_unavailable,
@@ -436,12 +437,17 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     }) catch |response_err| {
                         ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
                         ctx.server.reader.state = .closing;
+                        if (err == error.Canceled) return err;
+                        if (response_err == error.Canceled) return response_err;
                         return;
                     };
                     ctx.log_extra_errors();
                     ctx.server.reader.state = .closing;
+                    if (err == error.Canceled) return err;
                 }
             };
+
+            return ctx.propagate_cancel();
         }
     };
 }
@@ -518,6 +524,13 @@ const Handler_Context = struct {
         if (ctx.writer.write_file_err) |werr| {
             log.warn("{f}: Failed to write response: {}", .{ ctx.cid, werr });
         }
+    }
+
+    pub fn propagate_cancel(ctx: Handler_Context) std.Io.Cancelable!void {
+        if (ctx.reader.err) |rerr| if (rerr == error.Canceled) return rerr;
+        if (ctx.server.reader.body_err) |rerr| if (rerr == error.Canceled) return rerr;
+        if (ctx.writer.err) |werr| if (werr == error.Canceled) return werr;
+        if (ctx.writer.write_file_err) |werr| if (werr == error.Canceled) return werr;
     }
 };
 

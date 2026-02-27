@@ -455,7 +455,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
         if (options.trace) |ert| {
             std.debug.dumpStackTrace(ert);
         }
-        return error.Canceled;
+        return error.Done;
     }
 
     if (options.err) |e| {
