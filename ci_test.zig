@@ -21,7 +21,7 @@ test "server lifecycle" {
 
     const addr = try http.parse_hostname(std.testing.allocator, "127.0.0.1", 21345);
     try server.start(.{ .address = addr, .connection_threads = 0 });
-    try server.stop();
+    server.stop();
 }
 
 const http = @import("http");
