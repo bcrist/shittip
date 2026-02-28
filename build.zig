@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .target = target,
     });
-    tests.root_module.addImport("http", http);
+    citests.root_module.addImport("http", http);
     b.step("citest", "Run all tests").dependOn(&b.addRunArtifact(citests).step);
 
     inline for ([_]std.builtin.OptimizeMode { .Debug, .ReleaseFast }) |mode| {
