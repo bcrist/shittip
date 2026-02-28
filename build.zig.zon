@@ -12,8 +12,8 @@
     },
     .dependencies = .{
         .Temp_Allocator = .{
-            .url = "git+https://github.com/bcrist/zig-tempallocator#058f6331d499e81df7b58858e7307543d5484404",
-            .hash = "1220701ccddd24087e96610b5d8251a1244e1d07c805e835f21780f231ea17b12f93",
+            .url = "git+https://github.com/bcrist/zig-tempallocator#443a4e5f2c7c816d4dd087348b82cd7bc50c03f7",
+            .hash = "Temp_Allocator-1.0.4-tT3p3NsxAABo7Tjdl7ZgD6zu_-E9SuokqOzUNxaZ-TDC",
         },
         .tempora = .{
             .url = "git+https://github.com/bcrist/tempora#3fcbad9684516f60b931940beef486433fba8465",
