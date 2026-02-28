@@ -30,6 +30,14 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(&run_tests.step);
 
+    const citests = b.addTest(.{
+        .root_source_file = b.path("ci_test.zig"),
+        .optimize = b.standardOptimizeOption(.{}),
+        .target = b.standardTargetOptions(.{}),
+    });
+    tests.root_module.addImport("http", http);
+    b.step("citest", "Run all tests").dependOn(&b.addRunArtifact(citests).step);
+
     inline for ([_]std.builtin.OptimizeMode { .Debug, .ReleaseFast }) |mode| {
         const suffix = switch (mode) {
             .Debug => "_debug",
