@@ -20,10 +20,13 @@ pub fn build(b: *std.Build) void {
     http.addImport("zkittle", ext.zkittle);
     http.addImport("percent_encoding", ext.percent_encoding);
 
+    const optimize = b.standardOptimizeOption(.{});
+    const target = b.standardTargetOptions(.{});
+
     const tests = b.addTest(.{
         .root_source_file = b.path("test.zig"),
-        .optimize = b.standardOptimizeOption(.{}),
-        .target = b.standardTargetOptions(.{}),
+        .optimize = optimize,
+        .target = target,
     });
     tests.root_module.addImport("http", http);
     const run_tests = b.addRunArtifact(tests);
@@ -32,8 +35,8 @@ pub fn build(b: *std.Build) void {
 
     const citests = b.addTest(.{
         .root_source_file = b.path("ci_test.zig"),
-        .optimize = b.standardOptimizeOption(.{}),
-        .target = b.standardTargetOptions(.{}),
+        .optimize = optimize,
+        .target = target,
     });
     tests.root_module.addImport("http", http);
     b.step("citest", "Run all tests").dependOn(&b.addRunArtifact(citests).step);
