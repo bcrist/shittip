@@ -1,7 +1,7 @@
 .{
     .name = "shittip",
     .version = "0.2.9",
-    .minimum_zig_version = "0.14.0-dev.1694+3b465ebec",
+    .minimum_zig_version = "0.14.1",
     .paths = .{
         "src",
         "tools",
