@@ -1,5 +1,8 @@
 test "server lifecycle" {
-    var server = http.Server(http.Default_Injector).init(std.testing.allocator);
+    var loop: http.Loop = .init(std.testing.io, std.testing.allocator);
+    defer loop.deinit();
+
+    var server = http.default_server(&loop, .{});
     defer server.deinit();
 
     const r = http.routing;
@@ -7,21 +10,26 @@ test "server lifecycle" {
         .{ "/hello",
             r.static_internal(.{
                 .content = "Hello World",
-                .content_type = http.content_type.text,
+                .content_type = .text_utf8,
             }),
         },
         .{ "/shutdown",
-            r.shutdown,
             r.static_internal(.{
                 .content = "Shutting Down",
-                .content_type = http.content_type.html,
+                .content_type = .html_utf8,
             }),
+            r.shutdown,
         },
     });
 
-    const addr = try http.parse_hostname(std.testing.allocator, "127.0.0.1", 21345);
-    try server.start(.{ .address = addr, .connection_threads = 0 });
-    try server.stop();
+    loop.start();
+    defer loop.finish_running();
+
+    try server.lookup_and_start("127.0.0.1", 21345, .{});
+
+    loop.begin_running();
+    loop.stop();
+    loop.finish_running();
 }
 
 const http = @import("http");

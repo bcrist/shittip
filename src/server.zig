@@ -437,13 +437,13 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     }) catch |response_err| {
                         ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
                         ctx.server.reader.state = .closing;
-                        if (err == error.Canceled) return err;
-                        if (response_err == error.Canceled) return response_err;
+                        if (err == error.Canceled) return error.Canceled;
+                        if (response_err == error.Canceled) return error.Canceled;
                         return;
                     };
                     ctx.log_extra_errors();
                     ctx.server.reader.state = .closing;
-                    if (err == error.Canceled) return err;
+                    if (err == error.Canceled) return error.Canceled;
                 }
             };
 
@@ -527,10 +527,10 @@ const Handler_Context = struct {
     }
 
     pub fn propagate_cancel(ctx: Handler_Context) std.Io.Cancelable!void {
-        if (ctx.reader.err) |rerr| if (rerr == error.Canceled) return rerr;
-        if (ctx.server.reader.body_err) |rerr| if (rerr == error.Canceled) return rerr;
-        if (ctx.writer.err) |werr| if (werr == error.Canceled) return werr;
-        if (ctx.writer.write_file_err) |werr| if (werr == error.Canceled) return werr;
+        if (ctx.reader.err) |rerr| if (rerr == error.Canceled) return error.Canceled;
+        if (ctx.server.reader.body_err) |rerr| if (rerr == error.Canceled) return error.Canceled;
+        if (ctx.writer.err) |werr| if (werr == error.Canceled) return error.Canceled;
+        if (ctx.writer.write_file_err) |werr| if (werr == error.Canceled) return error.Canceled;
     }
 };
 

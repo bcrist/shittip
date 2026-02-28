@@ -22,11 +22,14 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const optimize = b.standardOptimizeOption(.{});
+    const target = b.standardTargetOptions(.{});
+
     const tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("test.zig"),
-            .optimize = b.standardOptimizeOption(.{}),
-            .target = b.standardTargetOptions(.{}),
+            .optimize = optimize,
+            .target = target,
             .imports = &.{
                 .{ .name = "http", .module = http },
             },
@@ -36,11 +39,15 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(tests);
 
     const citests = b.addTest(.{
-        .root_source_file = b.path("ci_test.zig"),
-        .optimize = b.standardOptimizeOption(.{}),
-        .target = b.standardTargetOptions(.{}),
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("ci_test.zig"),
+            .optimize = optimize,
+            .target = target,
+            .imports = &.{
+                .{ .name = "http", .module = http },
+            },
+        }),
     });
-    tests.root_module.addImport("http", http);
     b.step("citest", "Run all tests").dependOn(&b.addRunArtifact(citests).step);
 
     inline for ([_]std.builtin.OptimizeMode { .Debug, .ReleaseFast }) |mode| {
