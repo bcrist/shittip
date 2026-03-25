@@ -16,16 +16,16 @@
             .hash = "Temp_Allocator-1.1.0-tT3p3A87AABZiuTViLy8MFQsedqQV9l2Wj7PB_B7lFni",
         },
         .tempora = .{
-            .url = "git+https://github.com/bcrist/tempora?ref=zig-0.16#d4197542b905c54f4f169cd1f3d79bba3c202058",
-            .hash = "tempora-0.5.0-GTyeDd3xCAC0Z3-2udzPq4ZJjKbFHDCJ19SAEoD37RiF",
+            .url = "git+https://github.com/bcrist/tempora?ref=zig-0.16#44e208abb0db98f58e5b0bb706777450b279ff94",
+            .hash = "tempora-0.5.0-GTyeDd_xCACe3OLOF7S_kXYkNhgOVbI0jXDeOb2BXjbs",
         },
         .percent_encoding = .{
             .url = "git+https://github.com/bcrist/zig-percent-encoding?ref=zig-0.16#7ba26e51e3cfc7c6b2111aa89b11ebfd2cb7edf8",
             .hash = "percent_encoding-0.1.0-wAmwgCOBAABJq45HrRtYySG-YhaX81MaM6JPWBe7uivR",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle?ref=zig-0.16#1f4e33ba10cb30ccbe3a4abf2e414b36370708ea",
-            .hash = "zkittle-0.1.0-Nt34TLBKAQDW9wfbNljpZockKeRNS3jyk1ud3Xh2ydfM",
+            .url = "git+https://github.com/bcrist/zkittle?ref=zig-0.16#967056cd5d56fa40610b9f23d43cff2479c30104",
+            .hash = "zkittle-0.1.0-Nt34TOFLAQDPfdzip7UT3KCDHEoXxdceq_rBMsPAiNjx",
         },
         .dizzy = .{
             .url = "git+https://github.com/bcrist/dizzy#0ea2ce5e99ad2a9d23904b56844513122f37ad50",
