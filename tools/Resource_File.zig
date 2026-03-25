@@ -18,7 +18,7 @@ pub const Cache = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
     diagnostic_writer: *std.Io.Writer,
-    include_dirs: std.ArrayListUnmanaged(Directory) = .{},
+    include_dirs: std.ArrayList(Directory) = .empty,
     files: std.StringArrayHashMapUnmanaged(*Resource_File) = .{},
 
     pub const Directory = struct {

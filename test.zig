@@ -4,11 +4,8 @@ fn run_server_guarded() void {
     run_server() catch @panic("run_server() errored!");
 }
 
-fn run_server(io: std.Io, gpa: std.mem.Allocator) !void {
-    var loop: http.Loop = .init(io, gpa);
-    defer loop.deinit();
-
-    var server = http.default_server(&loop, .{});
+fn run_server(loop: *http.Loop) !void {
+    var server = http.default_server(loop, .{});
     defer server.deinit();
 
     const r = http.routing;
@@ -38,7 +35,10 @@ fn run_server(io: std.Io, gpa: std.mem.Allocator) !void {
 
 
 test "server lifecycle" {
-    var server_future = try std.testing.io.concurrent(run_server, .{ std.testing.io, std.testing.allocator });
+    var loop: http.Loop = .init(std.testing.io, std.testing.allocator);
+    defer loop.deinit();
+
+    var server_future = try std.testing.io.concurrent(run_server, .{ &loop });
 
     var client: std.http.Client = .{
         .io = std.testing.io,
@@ -67,6 +67,8 @@ test "server lifecycle" {
         });
         try std.testing.expectEqual(.ok, result.status);
     }
+
+    // loop.stop();
 
     try server_future.await(std.testing.io);
 }

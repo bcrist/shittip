@@ -213,9 +213,9 @@ const Resource_File = struct {
 
 const Resource_Files = struct {
     allocator: std.mem.Allocator,
-    raw_files: std.ArrayListUnmanaged(Resource_File) = .{},
-    template_files: std.ArrayListUnmanaged(Resource_File) = .{},
-    static_template_files: std.ArrayListUnmanaged(Resource_File) = .{},
+    raw_files: std.ArrayList(Resource_File) = .empty,
+    template_files: std.ArrayList(Resource_File) = .empty,
+    static_template_files: std.ArrayList(Resource_File) = .empty,
 
     pub fn maybe_add(self: *Resource_Files, subpath: []const u8, options: Resource_Path) void {
         const owned_subpath = self.allocator.dupe(u8, subpath) catch @panic("OOM");

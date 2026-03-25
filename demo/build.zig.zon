@@ -9,12 +9,12 @@
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://github.com/bcrist/tempora?ref=zig-0.16#baa534827ede34455deeade60ff2d520b65bc6b1",
-            .hash = "tempora-0.5.0-GTyeDYHxCAAKHR0LiM1jOKPYq49OwP7-0s_0Y_seKuRQ",
+            .url = "git+https://github.com/bcrist/tempora?ref=zig-0.16#44e208abb0db98f58e5b0bb706777450b279ff94",
+            .hash = "tempora-0.5.0-GTyeDd_xCACe3OLOF7S_kXYkNhgOVbI0jXDeOb2BXjbs",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle?ref=zig-0.16#1f4e33ba10cb30ccbe3a4abf2e414b36370708ea",
-            .hash = "zkittle-0.1.0-Nt34TLBKAQDW9wfbNljpZockKeRNS3jyk1ud3Xh2ydfM",
+            .url = "git+https://github.com/bcrist/zkittle?ref=zig-0.16#967056cd5d56fa40610b9f23d43cff2479c30104",
+            .hash = "zkittle-0.1.0-Nt34TOFLAQDPfdzip7UT3KCDHEoXxdceq_rBMsPAiNjx",
         },
     },
 }
