@@ -9,12 +9,12 @@
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://github.com/bcrist/tempora?ref=zig-0.16#44e208abb0db98f58e5b0bb706777450b279ff94",
+            .url = "git+https://codeberg.org/bcrist/tempora?ref=zig-0.16#44e208abb0db98f58e5b0bb706777450b279ff94",
             .hash = "tempora-0.5.0-GTyeDd_xCACe3OLOF7S_kXYkNhgOVbI0jXDeOb2BXjbs",
         },
         .zkittle = .{
-            .url = "git+https://github.com/bcrist/zkittle?ref=zig-0.16#967056cd5d56fa40610b9f23d43cff2479c30104",
-            .hash = "zkittle-0.1.0-Nt34TOFLAQDPfdzip7UT3KCDHEoXxdceq_rBMsPAiNjx",
+            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-0.16#518fcd9aba73e56d080b0a767bc9a0a08697e95c",
+            .hash = "zkittle-0.1.2-Nt34THVSAQBSeGlIujLJJM-Bh6MNuLvZvy9NKqzFrvun",
         },
     },
 }

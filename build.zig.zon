@@ -24,8 +24,8 @@
             .hash = "percent_encoding-0.1.0-wAmwgCOBAABJq45HrRtYySG-YhaX81MaM6JPWBe7uivR",
         },
         .zkittle = .{
-            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-0.16#9b7eb9fa7d06f6e1c73b1a337534eb9bcd0a8e0f",
-            .hash = "zkittle-0.1.1-Nt34TM5SAQD_sNN92C4_aqHUK3tdSeSz1F2g4OQzCWFN",
+            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-0.16#518fcd9aba73e56d080b0a767bc9a0a08697e95c",
+            .hash = "zkittle-0.1.2-Nt34THVSAQBSeGlIujLJJM-Bh6MNuLvZvy9NKqzFrvun",
         },
         .dizzy = .{
             .url = "git+https://codeberg.org/bcrist/dizzy#4c246bc78418c4fab23ea0464e3125065fb06359",
