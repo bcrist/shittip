@@ -207,6 +207,7 @@ pub fn compute_digest(self: *Resource_File, temp: std.mem.Allocator) !Digest {
             var hash_buf: [4096]u8 = undefined;
             var writer = std.Io.Writer.Hashing(Hash).init(&hash_buf);
             try template.render(&writer.writer, {}, .{ .escape_fn = Template.escape.none });
+            try writer.writer.flush();
             writer.hasher.final(&hash);
         },
     }
@@ -259,6 +260,8 @@ pub fn template_resource(p: *Template.Parser, raw_path: []const u8) anyerror![]c
     const file = try c.get(raw_path);
     return try file.compute_http_path(c.arena, c.gpa);
 }
+
+const log = std.log.scoped(.shittip);
 
 const Template = @import("zkittle");
 const std = @import("std");

@@ -9,6 +9,8 @@ pub const Content_Type = union (enum) {
     binary,
     pdf,
     zip,
+    gzip,
+    xz,
     form_urlencoded: ?Charset,
     form_multipart: []const u8,
     svg: ?Charset,
@@ -40,7 +42,7 @@ pub const Content_Type = union (enum) {
     pub fn @"type"(self: Content_Type) []const u8 {
         return switch (self) {
             .text, .html, .css, .javascript, .csv => "text",
-            .json, .xml, .form_urlencoded, .binary, .pdf, .zip => "application",
+            .json, .xml, .form_urlencoded, .binary, .pdf, .zip, .gzip, .xz => "application",
             .form_multipart => "multipart",
             .svg, .jpeg, .png, .gif, .icon => "image",
             .ttf, .otf, .woff2 => "font",
@@ -57,6 +59,7 @@ pub const Content_Type = union (enum) {
             .form_multipart => "form-data",
             .svg => "svg+xml",
             .icon => "x-icon",
+            .xz => "x-xz",
             .mp3 => "mpeg",
             .other => |info| info.subtype,
             inline else => |_, ct| @tagName(ct),
@@ -80,7 +83,7 @@ pub const Content_Type = union (enum) {
                 .name = "boundary",
                 .value = boundary
             },
-            .binary, .pdf, .zip, .jpeg, .png, .gif, .icon, .ttf, .otf, .woff2, .mp3, .vorbis => null,
+            .binary, .pdf, .zip, .gzip, .xz, .jpeg, .png, .gif, .icon, .ttf, .otf, .woff2, .mp3, .vorbis => null,
             .other => |info| info.param,
         };
     }
@@ -129,7 +132,7 @@ pub const Content_Type = union (enum) {
                         return mime;
                     }
                 },
-                .binary, .pdf, .zip, .jpeg, .png, .gif, .icon, .ttf, .otf, .woff2, .mp3, .vorbis => {
+                .binary, .pdf, .zip, .gzip, .xz, .jpeg, .png, .gif, .icon, .ttf, .otf, .woff2, .mp3, .vorbis => {
                     if (name_trimmed.len == 0 and value_trimmed.len == 0) return mime;
                 },
                 .other => unreachable,
@@ -178,6 +181,8 @@ pub const Content_Type = union (enum) {
         .{ "image/vnd.microsoft.icon", Content_Type.icon },
         .{ "application/pdf", Content_Type.pdf },
         .{ "application/zip", Content_Type.zip },
+        .{ "application/gzip", Content_Type.gzip },
+        .{ "application/x-xz", Content_Type.xz },
         .{ "application/octet-stream", Content_Type.binary },
         .{ "font/ttf", Content_Type.ttf },
         .{ "font/otf", Content_Type.otf },
@@ -205,6 +210,9 @@ pub const Content_Type = union (enum) {
         .{ ".ico", Content_Type.icon },
         .{ ".pdf", Content_Type.pdf },
         .{ ".zip", Content_Type.zip },
+        .{ ".gzip", Content_Type.gzip },
+        .{ ".gz", Content_Type.gzip },
+        .{ ".xz", Content_Type.xz },
         .{ ".ttf", Content_Type.ttf },
         .{ ".otf", Content_Type.otf },
         .{ ".woff2", Content_Type.woff2 },

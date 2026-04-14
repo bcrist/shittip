@@ -83,11 +83,7 @@ pub fn handle(self: *Request, ctx: *anyopaque, root_flow: []const u8) !void {
         try handler(self, ctx);
     }
 
-    switch (self.response.state) {
-        .not_started => return error.NotFound,
-        .streaming => |*bw| try bw.end(),
-        .sent => {},
-    }
+    try self.end_response();
 }
 
 pub fn chain(self: *Request, flow: []const u8) std.mem.Allocator.Error!bool {
@@ -108,7 +104,7 @@ pub fn chain(self: *Request, flow: []const u8) std.mem.Allocator.Error!bool {
     return false;
 }
 
-pub fn replace_arena(self: *Request) !void {
+pub fn replace_arena(self: *Request) error{InsufficientResources}!void {
     if (self.internal.ta_pool.index == null) {
         const index = try self.internal.ta_pool.pool.acquire(self.cid.connection_num);
         self.internal.ta_pool.index = index;
@@ -407,6 +403,17 @@ pub fn response_writer(self: *Request) !*std.Io.Writer {
         },
         .streaming => |*writer| return &writer.writer,
         .sent => return error.ResponseAlreadySent,
+    }
+}
+
+pub fn end_response(self: *Request) !void {
+    switch (self.response.state) {
+        .not_started => return error.NotFound,
+        .streaming => |*bw| {
+            try bw.end();
+            self.response.state = .sent;
+        },
+        .sent => {},
     }
 }
 

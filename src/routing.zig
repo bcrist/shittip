@@ -271,28 +271,36 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
     }.handler;
 }
 
-pub fn module(comptime Injector: type, comptime Module: type) *const fn(*Request, Injector.Input) anyerror!void {
+pub fn module(comptime Injector: type, comptime M: type) *const fn(*Request, Injector.Input) anyerror!void {
     return struct {
         pub fn handler(req: *Request, in: Injector.Input) anyerror!void {
             switch (req.req.head.method) {
-                .HEAD => if (@hasDecl(Module, "head")) {
-                    return try Injector.call(Module.head, in);
-                } else if (@hasDecl(Module, "get")) {
-                    return try Injector.call(Module.get, in);
+                .HEAD => if (@hasDecl(M, "head")) {
+                    return try Injector.call(M.head, in);
+                } else if (@hasDecl(M, "get")) {
+                    return try Injector.call(M.get, in);
                 },
-                .GET => if (@hasDecl(Module, "get")) return try Injector.call(Module.get, in),
-                .POST => if (@hasDecl(Module, "post")) return try Injector.call(Module.post, in),
-                .PUT => if (@hasDecl(Module, "put")) return try Injector.call(Module.put, in),
-                .DELETE => if (@hasDecl(Module, "delete")) return try Injector.call(Module.delete, in),
-                .CONNECT => if (@hasDecl(Module, "connect")) return try Injector.call(Module.connect, in),
-                .OPTIONS => if (@hasDecl(Module, "options")) return try Injector.call(Module.options, in),
-                .TRACE => if (@hasDecl(Module, "trace")) return try Injector.call(Module.trace, in),
-                .PATCH => if (@hasDecl(Module, "patch")) return try Injector.call(Module.patch, in),
+                .GET => if (@hasDecl(M, "get")) return try Injector.call(M.get, in),
+                .POST => if (@hasDecl(M, "post")) return try Injector.call(M.post, in),
+                .PUT => if (@hasDecl(M, "put")) return try Injector.call(M.put, in),
+                .DELETE => if (@hasDecl(M, "delete")) return try Injector.call(M.delete, in),
+                .CONNECT => if (@hasDecl(M, "connect")) return try Injector.call(M.connect, in),
+                .OPTIONS => if (@hasDecl(M, "options")) return try Injector.call(M.options, in),
+                .TRACE => if (@hasDecl(M, "trace")) return try Injector.call(M.trace, in),
+                .PATCH => if (@hasDecl(M, "patch")) return try Injector.call(M.patch, in),
             }
 
             return error.MethodNotAllowed;
         }
     }.handler;
+}
+
+pub fn Module(comptime Injector: type) *const fn(comptime M: type) *const fn(*Request, Injector.Input) anyerror!void {
+    return struct {
+        pub fn m(comptime M: type) *const fn(*Request, Injector.Input) anyerror!void {
+            return module(Injector, M);
+        }
+    }.m;
 }
 
 pub fn method(comptime required_method: std.http.Method) *const fn(*Request) anyerror!void {
@@ -306,10 +314,15 @@ pub fn method(comptime required_method: std.http.Method) *const fn(*Request) any
 }
 
 pub fn shutdown(req: *Request, loop: *Loop) !void {
-    defer loop.stop();
     try req.set_response_header("cache-control", "no-cache");
     req.response.keep_alive = false;
     try req.respond("");
+    try loop.servers.items[0].group.concurrent(loop.io, stop, .{ loop });
+}
+
+pub fn stop(loop: *Loop) error{Canceled}!void {
+    try loop.io.sleep(.fromMilliseconds(100), .real);
+    loop.stop();
 }
 
 pub fn replace_arena(req: *Request) !void {

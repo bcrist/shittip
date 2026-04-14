@@ -9,7 +9,7 @@ pub fn deinit(self: *Index_Pool, allocator: std.mem.Allocator) void {
 }
 
 // Not threadsafe.
-pub fn reset(self: *Index_Pool, allocator: std.mem.Allocator, size: usize) !void {
+pub fn reset(self: *Index_Pool, allocator: std.mem.Allocator, size: usize) error{OutOfMemory}!void {
     if (size > self.bitset.capacity()) {
         self.bitset.setAll();
         try self.bitset.resize(allocator, size, true);
@@ -19,7 +19,7 @@ pub fn reset(self: *Index_Pool, allocator: std.mem.Allocator, size: usize) !void
     }
 }
 
-pub fn acquire(self: *Index_Pool, random: usize) !usize {
+pub fn acquire(self: *Index_Pool, random: usize) error{InsufficientResources}!usize {
     const count = self.bitset.bit_length;
     const num_masks = self.get_num_masks();
     const first = random % num_masks;

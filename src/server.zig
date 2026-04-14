@@ -28,7 +28,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
     const Injector_Context = if (Injector_Type.Input == *Request) void else T: {
         const Input = Injector_Type.Input;
         const info = @typeInfo(Input);
-        if (info != .@"struct" or info.@"struct".fields.len != 2 or !@hasField(info, "request") or !@hasField(info, "context") or @FieldType(Input, "request") != *Request) {
+        if (info != .@"struct" or info.@"struct".fields.len != 2 or !@hasField(Input, "request") or !@hasField(Input, "context") or @FieldType(Input, "request") != *Request) {
             @compileError("Injector.Input must be `*http.Request` or `struct { request: *http.Request, context: *T }`");
         }
         const ptr_info = @typeInfo(@FieldType(Input, "context"));
@@ -77,7 +77,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
         }
 
         pub fn deinit(self: *Self) void {
-            if (@typeInfo(Injector_Context) == .@"struct" and @hasDecl(Injector_Context, "deinit") and @typeInfo(Injector_Context.deinit).@"fn".params.len == 1) {
+            if (@typeInfo(Injector_Context) == .@"struct" and @hasDecl(Injector_Context, "deinit") and @typeInfo(@TypeOf(Injector_Context.deinit)).@"fn".params.len == 1) {
                 self.injector_context.deinit();
             }
 
@@ -110,7 +110,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     if (Injector_Context == void) {
                         try Injector.call(handler_func, request);
                     } else {
-                        const injector_context: *Injector_Context = @ptrCast(ctx);
+                        const injector_context: *Injector_Context = @alignCast(@ptrCast(ctx));
                         try Injector.call(handler_func, .{
                             .request = request,
                             .context = injector_context,
@@ -118,6 +118,8 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     }
                 }
             }.handle);
+
+            log.debug("registered handler for flow: {s}", .{ flow });
         }
 
         pub fn router(self: *Self, comptime prefix: []const u8, comptime routes: anytype) !void {
@@ -234,7 +236,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             var server = incoming_server;
             defer server.deinit(io);
 
-            log.debug("S{d}: Now listening for connections on {f}...", .{ server_num, server.socket.address });
+            log.info("S{d}: Now listening for connections on {f}...", .{ server_num, server.socket.address });
 
             self.loop.wait_state_end(.starting);
 
@@ -256,7 +258,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         return;
                     },
                 };
-                log.info("{f}: connection from {f}", .{ cid, stream.socket.address });
+                log.debug("{f}: connection on {f}", .{ cid, stream.socket.address });
 
                 try self.tasks.mutex.lock(io);
                 defer self.tasks.mutex.unlock(io);
@@ -323,8 +325,9 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         return ctx.propagate_cancel();
                     },
                     error.ReadFailed => {
+                        try ctx.propagate_cancel();
                         ctx.log_error("Failed to read headers", err, @errorReturnTrace());
-                        return ctx.propagate_cancel();
+                        return;
                     },
                 };
 
@@ -477,6 +480,7 @@ fn status_from_error(err: anyerror) ?std.http.Status {
         error.InternalServerError => .internal_server_error,
         error.NotImplemented => .not_implemented,
         error.ServiceUnavailable => .service_unavailable,
+        error.GatewayTimeout => .gateway_timeout,
         error.InsufficientStorage => .insufficient_storage,
         else => null,
     };
@@ -500,6 +504,7 @@ const Handler_Context = struct {
 
     pub fn log_extra_errors(ctx: Handler_Context) void {
         if (ctx.reader.err) |rerr| switch (rerr) {
+            error.Canceled => {},
             error.ConnectionResetByPeer, error.Timeout => {
                 log.debug("{f}: Failed to read request: {}", .{ ctx.cid, rerr });
             },
@@ -513,6 +518,7 @@ const Handler_Context = struct {
         }
 
         if (ctx.writer.err) |werr| switch (werr) {
+            error.Canceled => {},
             error.ConnectionResetByPeer => {
                 log.debug("{f}: Failed to write response: {}", .{ ctx.cid, werr });
             },
@@ -521,9 +527,12 @@ const Handler_Context = struct {
             },
         };
 
-        if (ctx.writer.write_file_err) |werr| {
-            log.warn("{f}: Failed to write response: {}", .{ ctx.cid, werr });
-        }
+        if (ctx.writer.write_file_err) |werr| switch (werr) {
+            error.Canceled => {},
+            else => {
+                log.warn("{f}: Failed to write response: {}", .{ ctx.cid, werr });
+            },
+        };
     }
 
     pub fn propagate_cancel(ctx: Handler_Context) std.Io.Cancelable!void {

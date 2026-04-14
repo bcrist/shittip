@@ -104,6 +104,7 @@ pub const Resource_Options = struct {
     tempora: ?*std.Build.Module = null,
     zkittle: ?*std.Build.Module = null,
     debug: bool = false,
+    install: ?[]const u8 = null,
 };
 
 pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_Options) *std.Build.Module {
@@ -202,6 +203,14 @@ pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_
     const res_module = b.createModule(.{ .root_source_file = res_source });
     res_module.addImport("tempora", options.tempora orelse b.dependency("tempora", .{}).module("tempora"));
     res_module.addImport("zkittle", options.zkittle orelse b.dependency("zkittle", .{}).module("zkittle"));
+
+    if (options.install) |subdir| {
+        b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+            .source_dir = module_dir.getDirectory(),
+            .install_dir = .prefix,
+            .install_subdir = subdir,
+        }).step);
+    }
 
     return res_module;
 }
