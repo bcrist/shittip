@@ -16,7 +16,9 @@ pub const Digest = [Hash.digest_length]u8;
 pub const Cache = struct {
     arena: std.mem.Allocator,
     gpa: std.mem.Allocator,
-    include_dirs: std.ArrayListUnmanaged(Directory) = .{},
+    io: std.Io,
+    diagnostic_writer: *std.Io.Writer,
+    include_dirs: std.ArrayList(Directory) = .empty,
     files: std.StringArrayHashMapUnmanaged(*Resource_File) = .{},
 
     pub const Directory = struct {
@@ -52,14 +54,12 @@ pub const Cache = struct {
                 .raw => return error.PathIsNotTemplate,
             };
 
-            var temp = std.ArrayList(u8).init(self.gpa);
-            defer temp.deinit();
-
             var parser: Template.Parser = .{
                 .gpa = self.gpa,
                 .callback_context = null,
                 .include_callback = template_include,
                 .resource_callback = template_resource,
+                .diagnostic_writer = self.diagnostic_writer,
             };
             defer parser.deinit();
 
@@ -94,22 +94,20 @@ pub const Cache = struct {
             return error.InvalidTemplateFragment;
         }
 
-        const ext = std.fs.path.extension(path);
+        const ext = std.Io.Dir.path.extension(path);
 
         for (self.include_dirs.items) |dir_info| {
-            var dir = try std.fs.cwd().openDir(dir_info.path, .{});
-            defer dir.close();
+            var dir = try std.Io.Dir.cwd().openDir(self.io, dir_info.path, .{});
+            defer dir.close(self.io);
 
-            const stat = dir.statFile(path) catch |err| switch (err) {
+            const source = dir.readFileAllocOptions(self.io, path, self.arena, .limited(1_000_000_000), .@"1", null) catch |err| switch (err) {
                 error.FileNotFound => continue,
                 else => return err,
             };
-
-            const realpath = try dir.realpathAlloc(self.arena, path);
-            errdefer self.arena.free(realpath);
-
-            const source = try dir.readFileAllocOptions(self.arena, realpath, 1_000_000_000, stat.size, 1, null);
             errdefer self.arena.free(source);
+
+            const realpath = try dir.realPathFileAlloc(self.io, path, self.arena);
+            errdefer self.arena.free(realpath);
 
             const is_template = for (dir_info.template_extensions) |template_ext| {
                 if (std.mem.eql(u8, template_ext, ext)) break true;
@@ -152,14 +150,12 @@ pub fn compute_output(self: *Resource_File, allocator: std.mem.Allocator) ![]con
     const output = switch (self.source) {
         .raw => |data| try allocator.dupe(u8, data),
         .template => |source| output: {
-            var temp = std.ArrayList(u8).init(allocator);
-            defer temp.deinit();
-
             var parser: Template.Parser = .{
                 .gpa = allocator,
                 .callback_context = self.cache,
                 .include_callback = template_include,
                 .resource_callback = template_resource,
+                .diagnostic_writer = self.cache.diagnostic_writer,
             };
             defer parser.deinit();
 
@@ -168,9 +164,11 @@ pub fn compute_output(self: *Resource_File, allocator: std.mem.Allocator) ![]con
             var template = try parser.finish(allocator, true);
             defer template.deinit(allocator);
 
-            const writer = temp.writer();
-            try template.render(writer.any(), {}, .{ .escape_fn = Template.escape.none });
-            const output = try temp.toOwnedSlice();
+            var writer = std.Io.Writer.Allocating.init(allocator);
+            defer writer.deinit();
+
+            try template.render(&writer.writer, {}, .{ .escape_fn = Template.escape.none });
+            const output = try writer.toOwnedSlice();
             var digest: Digest = undefined;
             Hash.hash(output, &digest, .{});
             self.digest = digest;
@@ -197,6 +195,7 @@ pub fn compute_digest(self: *Resource_File, temp: std.mem.Allocator) !Digest {
                 .callback_context = self.cache,
                 .include_callback = template_include,
                 .resource_callback = template_resource,
+                .diagnostic_writer = self.cache.diagnostic_writer,
             };
             defer parser.deinit();
 
@@ -205,10 +204,11 @@ pub fn compute_digest(self: *Resource_File, temp: std.mem.Allocator) !Digest {
             var template = try parser.finish(temp, true);
             defer template.deinit(temp);
 
-            var hasher = Hash.init(.{});
-            const writer = hasher.writer();
-            try template.render(writer.any(), {}, .{ .escape_fn = Template.escape.none });
-            hasher.final(&hash);
+            var hash_buf: [4096]u8 = undefined;
+            var writer = std.Io.Writer.Hashing(Hash).init(&hash_buf);
+            try template.render(&writer.writer, {}, .{ .escape_fn = Template.escape.none });
+            try writer.writer.flush();
+            writer.hasher.final(&hash);
         },
     }
 
@@ -220,7 +220,7 @@ pub fn compute_http_path(self: *Resource_File, arena: std.mem.Allocator, temp: s
     if (self.http_path) |path| return path;
 
     const hash = try self.compute_digest(temp);
-    const path = try std.fmt.allocPrint(arena, "/{}{s}", .{ std.fmt.fmtSliceHexLower(&hash), std.fs.path.extension(self.realpath) });
+    const path = try std.fmt.allocPrint(arena, "/{x}{s}", .{ &hash, std.Io.Dir.path.extension(self.realpath) });
     self.http_path = path;
     return path;
 }
@@ -239,7 +239,7 @@ pub fn template_include(p: *Template.Parser, raw_path: []const u8) anyerror!Temp
     }));
 
     var full_path = raw_path;
-    var path_buf_frag: [std.fs.max_path_bytes + 100]u8 = undefined;
+    var path_buf_frag: [std.Io.Dir.max_path_bytes + 100]u8 = undefined;
     if (std.mem.startsWith(u8, raw_path, "#")) {
         var base = p.include_stack.getLast().path;
         if (std.mem.indexOfScalar(u8, base, '#')) |frag_start| {
@@ -260,6 +260,8 @@ pub fn template_resource(p: *Template.Parser, raw_path: []const u8) anyerror![]c
     const file = try c.get(raw_path);
     return try file.compute_http_path(c.arena, c.gpa);
 }
+
+const log = std.log.scoped(.shittip);
 
 const Template = @import("zkittle");
 const std = @import("std");

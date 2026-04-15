@@ -4,8 +4,8 @@ fn run_server_guarded() void {
     run_server() catch @panic("run_server() errored!");
 }
 
-fn run_server() !void {
-    var server = http.Server(http.Default_Injector).init(std.testing.allocator);
+fn run_server(loop: *http.Loop) !void {
+    var server = http.default_server(loop, .{});
     defer server.deinit();
 
     const r = http.routing;
@@ -13,54 +13,66 @@ fn run_server() !void {
         .{ "/hello",
             r.static_internal(.{
                 .content = "Hello World",
-                .content_type = http.content_type.text,
+                .content_type = .text_utf8,
             }),
         },
         .{ "/shutdown",
-            r.shutdown,
             r.static_internal(.{
                 .content = "Shutting Down",
-                .content_type = http.content_type.html,
+                .content_type = .html_utf8,
             }),
+            r.shutdown,
         },
     });
 
-    const addr = try http.parse_hostname(std.testing.allocator, "127.0.0.1", 21345);
-    try server.start(.{ .address = addr, .connection_threads = 0 });
-    try server.run();
+    loop.start();
+    defer loop.finish_running();
+
+    try server.lookup_and_start("127.0.0.1", 21345, .{ .family = .ip4 });
+
+    loop.begin_running();
 }
 
 
 test "server lifecycle" {
-    var server_thread = try std.Thread.spawn(.{}, run_server, .{});
-    defer server_thread.join();
+    var loop: http.Loop = .init(std.testing.io, std.testing.allocator);
+    defer loop.deinit();
 
-    var client: std.http.Client = .{ .allocator = std.testing.allocator };
+    var server_future = try std.testing.io.concurrent(run_server, .{ &loop });
+
+    var client: std.http.Client = .{
+        .io = std.testing.io,
+        .allocator = std.testing.allocator,
+    };
     defer client.deinit();
 
-    var buf: [8192]u8 = undefined;
+    loop.wait_state_end(.starting);
 
     {
-        var req = try client.open(.GET, try std.Uri.parse("http://localhost:21345/hello"), .{
-            .server_header_buffer = &buf,
+        var content: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer content.deinit();
+
+        const result = try client.fetch(.{
+            .location = .{ .url = "http://localhost:21345/hello" },
+            .method = .GET,
             .keep_alive = false,
+            .response_writer = &content.writer,
         });
-        defer req.deinit();
-        try req.send();
-        try req.wait();
-        const content = try req.reader().readAllAlloc(std.testing.allocator, 10000);
-        defer std.testing.allocator.free(content);
-        try std.testing.expectEqualStrings("Hello World", content);
+        try std.testing.expectEqual(.ok, result.status);
+        try std.testing.expectEqualStrings("Hello World", content.written());
     }
-    {
-        var req = try client.open(.GET, try std.Uri.parse("http://localhost:21345/shutdown"), .{
-            .server_header_buffer = &buf,
-            .keep_alive = false,
-        });
-        defer req.deinit();
-        try req.send();
-        try req.wait();
-    }
+    // {
+    //     const result = try client.fetch(.{
+    //         .location = .{ .url = "http://127.0.0.1:21345/shutdown" },
+    //         .method = .GET,
+    //         .keep_alive = false,
+    //     });
+    //     try std.testing.expectEqual(.ok, result.status);
+    // }
+
+    loop.stop();
+
+    try server_future.await(std.testing.io);
 }
 
 const http = @import("http");

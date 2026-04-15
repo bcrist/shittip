@@ -1,99 +1,125 @@
-connection_number: usize,
+io: std.Io,
+arena: std.mem.Allocator, // recommend replacing with a Temp_Allocator for requests that hit a valid endpoint
+cid: Connection_Id,
 req: std.http.Server.Request,
-method: std.http.Method = @enumFromInt(0),
-full_path: []const u8 = "",
-unparsed_path: []const u8 = "",
-query: []const u8 = "",
-hash: []const u8 = "",
 received_dt: tempora.Date_Time,
-handlers: Handler_Fifo,
-response_headers: std.ArrayList(std.http.Header),
-response_version: ?std.http.Version = null,
-response_status: std.http.Status = .ok,
-response_reason: ?[]const u8 = null,
-response_keep_alive: bool = true,
-response_transfer_encoding: ?std.http.TransferEncoding = null,
-response_content_length: ?u64 = null,
-response_state: union (enum) {
-    not_started,
-    streaming: std.http.Server.Response,
-    sent,
-} = .not_started,
+content_type: ?Content_Type,
+
+target: struct {
+    full: []const u8,
+    path: []const u8,
+    path_remaining: []const u8, // hierarchical handlers can trim components off this and chain into other handlers
+    query: []const u8,
+    fragment: []const u8,
+
+    pub fn parse(target: []const u8) @This() {
+        const path = if (std.mem.indexOfAny(u8, target, "?#")) |end| target[0..end] else target;
+        const remaining_target = target[path.len..];
+        const query = if (std.mem.indexOfScalar(u8, remaining_target, '#')) |end| remaining_target[0..end] else remaining_target;
+        const fragment = remaining_target[query.len..];
+
+        return .{
+            .full = target,
+            .path = path,
+            .path_remaining = path,
+            .query = query,
+            .fragment = fragment,
+        };
+    }
+},
+
+handlers: std.Deque(server.Handler_Func),
+
+response: struct {
+    headers: std.ArrayList(std.http.Header),
+    version: std.http.Version,
+    status: std.http.Status,
+    reason: ?[]const u8,
+    keep_alive: bool,
+    transfer_encoding: ?std.http.TransferEncoding,
+    content_length: ?u64,
+    buffer_bytes: usize,
+    state: union (enum) {
+        not_started,
+        streaming: std.http.BodyWriter,
+        sent,
+    },
+
+    pub fn options(self: *const @This()) std.http.Server.Request.RespondOptions {
+        return .{
+            .version = self.version,
+            .status = self.status,
+            .reason = self.reason,
+            .keep_alive = self.keep_alive,
+            .extra_headers = self.headers.items,
+            .transfer_encoding = self.transfer_encoding,
+        };
+    }
+},
+
+// Internal use; recommend not touching these:
+internal: struct {
+    loop: *Loop,
+    registry: *const std.StringHashMapUnmanaged(std.ArrayList(server.Handler_Func)),
+    body: ?*std.Io.Reader, // use .body_reader() to populate/access this
+    decompress: std.http.Decompress,
+    header_strings_cloned: bool,
+    ta_pool: struct {
+        pool: *Index_Pool,
+        allocators: []Temp_Allocator,
+        index: ?usize,
+    },
+    // same as req.head_buffer, but we copy it into the arena to avoid it going undefined when reading request body content
+    head_buffer: []const u8,
+    scratch_alloc: std.mem.Allocator,
+},
 
 const Request = @This();
-pub const Handler_Fifo = std.fifo.LinearFifo(Handler_Func, .Dynamic);
-pub const Handler_Func = *const fn () anyerror!void;
 
-pub fn handle(self: *Request) error{CloseConnection}!void {
-    self.method = self.req.head.method;
-    self.full_path = if (std.mem.indexOfAny(u8, self.req.head.target, "?#")) |end| self.req.head.target[0..end] else self.req.head.target;
-    self.unparsed_path = self.full_path;
-    
-    const remaining_target = self.req.head.target[self.full_path.len..];
-    self.query = if (std.mem.indexOfScalar(u8, remaining_target, '#')) |end| remaining_target[0..end] else remaining_target;
-    self.hash = remaining_target[self.query.len..];
+pub fn handle(self: *Request, ctx: *anyopaque, root_flow: []const u8) !void {
+    _ = try self.chain(root_flow);
 
-    log.debug("C{}: {s} {s}", .{
-        self.connection_number,
-        @tagName(self.method),
-        self.req.head.target,
-    });
-
-    self.try_set_date() catch {};
-
-    self.handlers = Handler_Fifo.init(server.temp.allocator());
-    _ = try self.chain("");
-
-    while (self.handlers.readItem()) |handler| {
-        handler() catch |err| switch (err) {
-            error.CloseConnection => return error.CloseConnection,
-            error.SkipRemainingHandlers => break,
-            error.BadRequest => try self.maybe_respond_err(.{ .status = .bad_request }),
-            error.Unauthorized => try self.maybe_respond_err(.{ .status = .unauthorized }),
-            error.MethodNotAllowed => try self.maybe_respond_err(.{ .status = .method_not_allowed }),
-            error.UnsupportedMediaType => try self.maybe_respond_err(.{ .status = .unsupported_media_type }),
-            else => try self.maybe_respond_err(.{ .err = err, .trace = @errorReturnTrace() }),
-        };
+    while (self.handlers.popFront()) |handler| {
+        try handler(self, ctx);
     }
 
-    switch (self.response_state) {
-        .not_started => try self.maybe_respond_err(.{ .status = .not_found }),
-        .streaming => |*res| res.end() catch |err| {
-            log.err("C{}: Failed to flush response stream: {}", .{ self.connection_number, err });
-            return error.CloseConnection;
-        },
-        .sent => {},
-    }
+    try self.end_response();
 }
 
-fn try_set_date(self: *Request) !void {
-    try self.set_response_header("date", try util.format_http_date(server.temp.allocator(), self.received_dt));
-}
-
-pub fn chain(self: *Request, flow: []const u8) error{CloseConnection}!bool {
-    if (server.registry.get(flow)) |handlers| {
-        log.debug("C{}: Chaining {} handler(s) for flow '{}'", .{
-            self.connection_number,
+pub fn chain(self: *Request, flow: []const u8) std.mem.Allocator.Error!bool {
+    if (self.internal.registry.get(flow)) |handlers| {
+        log.debug("{f}: Chaining {d} handler(s) for flow '{f}'", .{
+            self.cid,
             handlers.items.len,
-            std.zig.fmtEscapes(flow),
+            std.zig.fmtString(flow),
         });
-        self.handlers.write(handlers.items) catch |err| {
-            log.err("C{}: Failed to allocate handlers list: {}", .{ self.connection_number, err });
-            try self.maybe_respond_err(.{ .err = err, .status = .internal_server_error });
-            return error.CloseConnection;
-        };
+        try self.handlers.pushBackSlice(self.internal.scratch_alloc, handlers.items);
         return true;
     } else {
-        log.debug("C{}: No handler(s) for flow '{}'", .{
-            self.connection_number,
-            std.zig.fmtEscapes(flow),
+        log.debug("{f}: No handler(s) for flow '{f}'", .{
+            self.cid,
+            std.zig.fmtString(flow),
         });
     }
     return false;
 }
 
+pub fn replace_arena(self: *Request) error{InsufficientResources}!void {
+    if (self.internal.ta_pool.index == null) {
+        const index = try self.internal.ta_pool.pool.acquire(self.cid.connection_num);
+        self.internal.ta_pool.index = index;
+        self.arena = self.internal.ta_pool.allocators[index].allocator();
+    }
+}
+
+fn try_set_date(self: *Request) !void {
+    if (self.response.state == .not_started) {
+        try self.maybe_add_response_header("date", try self.fmt_http_date(self.received_dt));
+    }
+}
+
 pub fn header_iterator(self: *Request) std.http.HeaderIterator {
-    return self.req.iterateHeaders();
+    return std.http.HeaderIterator.init(self.internal.head_buffer);
 }
 
 pub fn get_header(self: *Request, name: []const u8) ?std.http.Header {
@@ -119,27 +145,27 @@ pub fn check_accept_encoding(self: *Request, desired_encoding: std.http.ContentE
 }
 
 pub fn path_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar) {
-    var full_path = self.full_path;
+    var full_path = self.target.path;
     if (std.mem.startsWith(u8, full_path, "/")) {
         full_path = full_path[1..];
     }
     return std.mem.splitScalar(u8, full_path, '/');
 }
 
-pub fn unparsed_path_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar) {
-    return std.mem.splitScalar(u8, self.unparsed_path, '/');
+pub fn path_remaining_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar) {
+    return std.mem.splitScalar(u8, self.target.path_remaining, '/');
 }
 
 pub fn get_path_param(self: *Request, name: []const u8) !?[]const u8 {
-    var temp = std.ArrayList(u8).init(server.temp.allocator());
+    var temp: std.ArrayList(u8) = .empty;
     var iter = self.path_iterator();
     while (iter.next()) |part| {
         if (std.mem.indexOfScalar(u8, part, ':')) |end| {
             temp.clearRetainingCapacity();
-            const prefix = try percent_encoding.decode_maybe_append(&temp, part[0 .. end], .{});
+            const prefix = try percent_encoding.decode_maybe_append(self.internal.scratch_alloc, &temp, part[0 .. end], .{});
             if (std.mem.eql(u8, name, prefix)) {
                 temp.clearRetainingCapacity();
-                return try percent_encoding.decode_maybe_append(&temp, part[end + 1 ..], .{});
+                return try percent_encoding.decode_maybe_append(self.internal.scratch_alloc, &temp, part[end + 1 ..], .{});
             }
         }
     }
@@ -147,7 +173,7 @@ pub fn get_path_param(self: *Request, name: []const u8) !?[]const u8 {
 }
 
 pub fn query_iterator(self: *Request) Query_Iterator {
-    return Query_Iterator.init(server.temp.allocator(), self.query);
+    return Query_Iterator.init(self.internal.scratch_alloc, self.target.query);
 }
 
 pub fn get_query_param(self: *Request, name: []const u8) !?[]const u8 {
@@ -171,21 +197,102 @@ pub fn has_query_param(self: *Request, name: []const u8) !bool {
     return false;
 }
 
-pub fn body_reader(self: *Request) !std.io.AnyReader {
-    return self.req.reader();
+pub fn body_reader(self: *Request) !*std.Io.Reader {
+    if (self.internal.body) |reader| return reader;
+
+    const has_body = self.req.head.method.requestHasBody() and if (self.req.head.content_length) |length| length > 0 else true;
+    if (has_body) {
+        const flush = self.req.head.expect != null;
+        try self.req.writeExpectContinue();
+        if (flush) try self.req.server.out.flush();
+
+        try self.clone_header_strings();
+
+        switch (self.req.head.transfer_compression) {
+            .compress => return error.UnsupportedMediaType,
+            .zstd => {
+                const transfer_buffer = try self.arena.alloc(u8, 4096);
+                const decompress_buffer = try self.arena.alloc(u8, std.compress.zstd.block_size_max + std.compress.zstd.default_window_len);
+                self.internal.body = self.req.server.reader.bodyReaderDecompressing(
+                    transfer_buffer,
+                    self.req.head.transfer_encoding,
+                    self.req.head.content_length,
+                    self.req.head.transfer_compression,
+                    &self.internal.decompress,
+                    decompress_buffer,
+                );
+            },
+            .gzip, .deflate => {
+                const transfer_buffer = try self.arena.alloc(u8, 4096);
+                const decompress_buffer = try self.arena.alloc(u8, std.compress.flate.max_window_len);
+                self.internal.body = self.req.server.reader.bodyReaderDecompressing(
+                    transfer_buffer,
+                    self.req.head.transfer_encoding,
+                    self.req.head.content_length,
+                    self.req.head.transfer_compression,
+                    &self.internal.decompress,
+                    decompress_buffer,
+                );
+            },
+            .identity => {
+                const transfer_buffer = try self.arena.alloc(u8, 4096);
+                self.internal.body = self.req.server.reader.bodyReader(
+                    transfer_buffer,
+                    self.req.head.transfer_encoding,
+                    self.req.head.content_length
+                );
+            },
+        }
+    } else {
+        self.req.server.reader.interface = std.Io.Reader.fixed("");
+        self.req.server.reader.state = .body_none;
+        self.internal.body = &self.req.server.reader.interface;
+    }
+
+    return self.internal.body.?;
+}
+
+pub fn clone_header_strings(self: *Request) !void {
+    if (self.internal.header_strings_cloned) return;
+
+    self.internal.head_buffer = try self.arena.dupe(u8, self.internal.head_buffer);
+    self.req.head_buffer = self.internal.head_buffer;
+
+    const path_remaining = try self.arena.dupe(u8, self.target.path_remaining);
+    self.target = .parse(try self.arena.dupe(u8, self.target.full));
+    self.target.path_remaining = path_remaining;
+
+    self.req.head.target = self.target.full;
+
+    if (self.get_header("content-type")) |ct| {
+        self.req.head.content_type = ct.value;
+        self.content_type = .parse(ct.value);
+    }
+
+    self.internal.header_strings_cloned = true;
+}
+
+fn restore_std_req_strings(self: *Request) void {
+    // undo the damage from std.http.Server.Request.Head.invalidateStrings()
+    std.debug.assert(self.internal.header_strings_cloned);
+    self.req.head_buffer = self.internal.head_buffer;
+    self.req.head.target = self.target.full;
+    if (self.get_header("content-type")) |ct| {
+        self.req.head.content_type = ct.value;
+    }
 }
 
 pub fn form_iterator(self: *Request) !Query_Reader {
-    return try Query_Reader.init(server.temp.allocator(), try self.body_reader());
+    return try Query_Reader.init(self.internal.scratch_alloc, try self.body_reader());
 }
 
 pub fn ensure_response_not_started(self: *Request) !void {
-    if (self.response_state != .not_started) return error.ResponseAlreadyStarted;
+    if (self.response.state != .not_started) return error.ResponseAlreadyStarted;
 }
 
 pub fn add_response_header(self: *Request, name: []const u8, value: []const u8) !void {
     try self.ensure_response_not_started();
-    try self.response_headers.append(.{
+    try self.response.headers.append(self.internal.scratch_alloc, .{
         .name = name,
         .value = value,
     });
@@ -194,13 +301,13 @@ pub fn add_response_header(self: *Request, name: []const u8, value: []const u8) 
 pub fn maybe_add_response_header(self: *Request, name: []const u8, value: []const u8) !bool {
     try self.ensure_response_not_started();
 
-    for (self.response_headers.items) |*header| {
+    for (self.response.headers.items) |*header| {
         if (std.ascii.eqlIgnoreCase(header.name, name)) {
             return false;
         }
     }
     
-    try self.response_headers.append(.{
+    try self.response.headers.append(self.internal.scratch_alloc, .{
         .name = name,
         .value = value,
     });
@@ -210,21 +317,21 @@ pub fn maybe_add_response_header(self: *Request, name: []const u8, value: []cons
 pub fn set_response_header(self: *Request, name: []const u8, value: []const u8) !void {
     try self.ensure_response_not_started();
 
-    for (self.response_headers.items) |*header| {
+    for (self.response.headers.items) |*header| {
         if (std.ascii.eqlIgnoreCase(header.name, name)) {
             header.value = value;
             return;
         }
     }
 
-    try self.response_headers.append(.{
+    try self.response.headers.append(self.internal.scratch_alloc, .{
         .name = name,
         .value = value,
     });
 }
 
 pub fn get_response_header(self: *Request, name: []const u8) ?[]const u8 {
-    for (self.response_headers.items) |header| {
+    for (self.response.headers.items) |header| {
         if (std.ascii.eqlIgnoreCase(header.name, name)) {
             return header.value;
         }
@@ -233,15 +340,15 @@ pub fn get_response_header(self: *Request, name: []const u8) ?[]const u8 {
 }
 
 pub fn check_and_add_last_modified(self: *Request, last_modified_utc: tempora.Date_Time) !void {
-    try self.add_response_header("last-modified", try util.format_http_date(server.temp.allocator(), last_modified_utc));
+    try self.add_response_header("last-modified", try self.fmt_http_date(last_modified_utc));
     if (self.get_header("if-modified-since")) |header| {
         const DTO = tempora.Date_Time.With_Offset;
-        if (DTO.from_string(DTO.fmt_http, header.value)) |last_seen| {
+        if (DTO.from_string(DTO.http, header.value)) |last_seen| {
             std.debug.assert(last_seen.utc_offset_ms == 0);
             if (!last_seen.dt.is_before(last_modified_utc)) {
                 self.response_status = .not_modified;
                 try self.respond("");
-                return error.SkipRemainingHandlers;
+                return error.Done;
             }
         } else |_| {
             log.debug("Could not parse if-modified-since date: {s}", .{ header.value });
@@ -262,57 +369,70 @@ pub fn hx_current_query(self: *Request) []const u8 {
     return "";
 }
 
-pub fn response(self: *Request) !*std.http.Server.Response {
-    switch (self.response_state) {
+fn maybe_clone_strings_before_response(self: *Request) !bool {
+    if (!self.response.keep_alive or !self.req.head.keep_alive or !self.req.head.method.requestHasBody()) return false;
+    const transfer_encoding_none = (self.response.transfer_encoding orelse .chunked) == .none;
+    if (transfer_encoding_none) return false; // we're not sending a content-length or content-encoding header, so the connection won't be reusable.
+
+    try self.clone_header_strings();
+    return true;
+}
+
+pub fn response_writer(self: *Request) !*std.Io.Writer {
+    switch (self.response.state) {
         .not_started => {
-            log.info("C{}: [{}] {s} {s}", .{
-                self.connection_number,
-                @intFromEnum(self.response_status),
-                @tagName(self.method),
+            log.info("{f}: [{d}] {t} {s}", .{
+                self.cid,
+                @intFromEnum(self.response.status),
+                self.req.head.method,
                 self.req.head.target,
             });
 
-            const send_buf = try server.temp.allocator().alloc(u8, 65536);
+            const buf = try self.arena.alloc(u8, self.response.buffer_bytes);
 
-            self.response_state = .{
-                .streaming = self.req.respondStreaming(.{
-                    .send_buffer = send_buf,
-                    .content_length = self.response_content_length,
-                    .respond_options = self.respond_options(),
+            const should_clone_strings = try self.maybe_clone_strings_before_response();
+            self.response.state = .{
+                .streaming = try self.req.respondStreaming(buf, .{
+                    .content_length = self.response.content_length,
+                    .respond_options = self.response.options(),
                 }),
             };
-            return &self.response_state.streaming;
+            if (should_clone_strings) self.restore_std_req_strings();
+
+            return &self.response.state.streaming.writer;
         },
-        .streaming => |*resp| return resp,
+        .streaming => |*writer| return &writer.writer,
         .sent => return error.ResponseAlreadySent,
+    }
+}
+
+pub fn end_response(self: *Request) !void {
+    switch (self.response.state) {
+        .not_started => return error.NotFound,
+        .streaming => |*bw| {
+            try bw.end();
+            self.response.state = .sent;
+        },
+        .sent => {},
     }
 }
 
 pub fn respond(self: *Request, content: []const u8) !void {
     try self.ensure_response_not_started();
-    self.response_state = .sent;
+    self.response.state = .sent;
 
-    log.info("C{}: [{}] {s} {s}", .{
-        self.connection_number,
-        @intFromEnum(self.response_status),
-        @tagName(self.method),
+    log.info("{f}: [{d}] {t} {s}", .{
+        self.cid,
+        @intFromEnum(self.response.status),
+        self.req.head.method,
         self.req.head.target,
     });
 
-    self.response_content_length = content.len;
+    self.response.content_length = content.len;
 
-    try self.req.respond(content, self.respond_options());
-}
-
-fn respond_options(self: *Request) std.http.Server.Request.RespondOptions {
-    return .{
-        .version = self.response_version orelse self.req.head.version,
-        .status = self.response_status,
-        .reason = self.response_reason,
-        .keep_alive = self.response_keep_alive,
-        .extra_headers = self.response_headers.items,
-        .transfer_encoding = self.response_transfer_encoding,
-    };
+    const should_clone_strings = try self.maybe_clone_strings_before_response();
+    try self.req.respond(content, self.response.options());
+    if (should_clone_strings) self.restore_std_req_strings();
 }
 
 const Respond_Err_Options = struct {
@@ -322,77 +442,69 @@ const Respond_Err_Options = struct {
     trace: ?*std.builtin.StackTrace = null,
 };
 pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
-    if (self.response_state != .not_started) {
+    if (self.response.state != .not_started) {
         if (options.err) |err| {
-            log.err("C{}: [{} {} after response started] {s} {s}", .{
-                self.connection_number,
+            log.err("{f}: [{} {} after response started] {t} {s}", .{
+                self.cid,
                 @intFromEnum(options.status),
                 err,
-                @tagName(self.method),
+                self.req.head.method,
                 self.req.head.target,
             });
         } else {
-            log.err("C{}: [{} after response started] {s} {s}", .{
-                self.connection_number,
+            log.err("{f}: [{} after response started] {t} {s}", .{
+                self.cid,
                 @intFromEnum(options.status),
-                @tagName(self.method),
+                self.req.head.method,
                 self.req.head.target,
             });
         }
         if (options.trace) |ert| {
-            std.debug.dumpStackTrace(ert.*);
+            std.debug.dumpStackTrace(ert);
         }
-        return error.CloseConnection;
+        return error.Done;
     }
-
-    if (!options.empty_content) {
-        try self.set_response_header("content-type", content_type.html);
-    }
-
-    self.response_state = .sent;
 
     if (options.err) |e| {
-        log.warn("C{}: [{} {}] {s} {s}", .{
-            self.connection_number,
+        log.warn("{f}: [{} {}] {t} {s}", .{
+            self.cid,
             @intFromEnum(options.status),
             e,
-            @tagName(self.method),
+            self.req.head.method,
             self.req.head.target,
         });
     } else {
-        log.info("C{}: [{}] {s} {s}", .{
-            self.connection_number,
+        log.info("{f}: [{}] {t} {s}", .{
+            self.cid,
             @intFromEnum(options.status),
-            @tagName(self.method),
+            self.req.head.method,
             self.req.head.target,
         });
     }
     if (options.trace) |ert| {
-        std.debug.dumpStackTrace(ert.*);
+        std.debug.dumpStackTrace(ert);
     }
 
-    const content = format_err_response(options) catch |err| {
-        log.warn("C{}: Closing connection (failed to format error response: {})", .{ self.connection_number, err });
-        if (@errorReturnTrace()) |ert| std.debug.dumpStackTrace(ert.*);
-        return error.CloseConnection;
-    };
+    if (!options.empty_content) {
+        try self.set_response_header("content-type", Content_Type.html_utf8.to_string());
+    }
 
-    self.response_status = options.status;
-    self.response_content_length = content.len;
+    const content = try self.format_err_response(options);
 
-    self.req.respond(content, self.respond_options()) catch |err| {
-        log.warn("C{}: Closing connection (failed to send error response: {})", .{ self.connection_number, err });
-        if (@errorReturnTrace()) |ert| std.debug.dumpStackTrace(ert.*);
-        return error.CloseConnection;
-    };
+    self.response.status = options.status;
+    self.response.content_length = content.len;
+    self.response.state = .sent;
+
+    const should_clone_strings = try self.maybe_clone_strings_before_response();
+    try self.req.respond(content, self.response.options());
+    if (should_clone_strings) self.restore_std_req_strings();
 }
 
-pub fn format_err_response(options: Respond_Err_Options) ![]const u8 {
+pub fn format_err_response(self: *Request, options: Respond_Err_Options) ![]const u8 {
     if (options.empty_content) return "";
 
-    const alloc = server.temp.allocator();
-    var content = std.ArrayList(u8).init(alloc);
-    var w = content.writer();
+    var content: std.Io.Writer.Allocating = .init(self.internal.scratch_alloc);
+    const w = &content.writer;
 
     try w.print(
         \\<!DOCTYPE html>
@@ -413,9 +525,12 @@ pub fn format_err_response(options: Respond_Err_Options) ![]const u8 {
     }
 
     if (options.trace) |ert| {
+        const terminal: std.Io.Terminal = .{
+            .writer = w,
+            .mode = .no_color,
+        };
         try w.writeAll("<pre>\n");
-        const debug_info = try std.debug.getSelfDebugInfo();
-        try std.debug.writeStackTrace(ert.*, w, debug_info, .no_color);
+        try std.debug.writeStackTrace(ert, terminal);
         try w.writeAll("</pre>\n");
     }
 
@@ -425,74 +540,79 @@ pub fn format_err_response(options: Respond_Err_Options) ![]const u8 {
         \\
         );
 
-    return content.items;
+    return content.written();
 }
 
-fn maybe_respond_err(self: *Request, options: Respond_Err_Options) error{CloseConnection}!void {
-    if (self.response_state != .not_started) {
+pub fn maybe_respond_err(self: *Request, options: Respond_Err_Options) !void {
+    if (self.response.state != .not_started) {
         if (options.err) |err| {
-            log.err("C{}: [{} {} after response started; suppressed] {s} {s}", .{
-                self.connection_number,
+            log.err("{f}: [{} {} after response started; suppressed] {t} {s}", .{
+                self.cid,
                 @intFromEnum(options.status),
                 err,
-                @tagName(self.method),
+                self.req.head.method,
                 self.req.head.target,
             });
         } else {
-            log.err("C{}: [{} after response started; suppressed] {s} {s}", .{
-                self.connection_number,
+            log.err("{f}: [{} after response started; suppressed] {t} {s}", .{
+                self.cid,
                 @intFromEnum(options.status),
-                @tagName(self.method),
+                self.req.head.method,
                 self.req.head.target,
             });
         }
         if (options.trace) |ert| {
-            std.debug.dumpStackTrace(ert.*);
+            std.debug.dumpStackTrace(ert);
         }
         return;
     }
 
-    self.respond_err(options) catch |err| {
-        if (err != error.CloseConnection) {
-            log.err("C{}: Closing connection (failed to send response: {})", .{ self.connection_number, err });
-            if (@errorReturnTrace()) |ert| std.debug.dumpStackTrace(ert.*);
-        }
-        return error.CloseConnection;
-    };
+    try self.respond_err(options);
 }
 
 pub fn redirect(self: *Request, path: []const u8, status: std.http.Status) !void {
     if (self.get_header("hx-request") != null) {
-        self.response_status = .no_content;
+        self.response.status = .no_content;
         try self.add_response_header("HX-Location", path);
     } else {
-        self.response_status = status;
+        self.response.status = status;
         try self.add_response_header("Location", path);
     }
     try self.respond("");
 }
 
 pub fn render(self: *Request, comptime template_path: []const u8, data: anytype, options: zkittle.Render_Options) anyerror!void {
-    if (self.response_state == .not_started) {
-        if (comptime content_type.lookup.get(std.fs.path.extension(template_path))) |ct| {
-            _ = try self.maybe_add_response_header("content-type", ct);
+    if (self.response.state == .not_started) {
+        if (comptime Content_Type.ext_lookup.get(std.fs.path.extension(template_path))) |ct| {
+            _ = try self.maybe_add_response_header("content-type", ct.to_string());
         }
         _ = try self.maybe_add_response_header("cache-control", "no-cache");
     }
-    const res = try self.response();
-    try @field(root.resources.templates, template_path).render(res.writer(), data, options);
+    const w = try self.response_writer();
+    try @field(root.resources.templates, template_path).render(w, data, options);
+}
+
+pub fn fmt(self: *Request, comptime pattern: []const u8, args: anytype) std.mem.Allocator.Error![]u8 {
+    return std.fmt.allocPrint(self.internal.scratch_alloc, pattern, args);
+}
+
+pub fn fmt_http_date(self: *Request, dt: tempora.Date_Time) std.mem.Allocator.Error![]u8 {
+    return std.fmt.allocPrint(self.internal.scratch_alloc, "{f}", .{ dt.with_offset(0).fmt(tempora.Date_Time.With_Offset.http) });
 }
 
 const log = std.log.scoped(.http);
 
 const Query_Iterator = @import("Query_Iterator.zig");
 const Query_Reader = @import("Query_Reader.zig");
-const percent_encoding = @import("percent_encoding");
-const content_type = @import("content_type.zig");
-const zkittle = @import("zkittle");
+const Connection_Id = @import("Connection_Id.zig");
+const Content_Type = @import("content_type.zig").Content_Type;
+const Loop = @import("Loop.zig");
+const Index_Pool = @import("Index_Pool.zig");
 const routing = @import("routing.zig");
 const server = @import("server.zig");
-const util = @import("util.zig");
+const Temp_Allocator = @import("Temp_Allocator");
+const percent_encoding = @import("percent_encoding");
+const zkittle = @import("zkittle");
 const tempora = @import("tempora");
 const std = @import("std");
 const root = @import("root");

@@ -1,10 +1,16 @@
-pub fn main() !void {
-    defer std.debug.assert(gpa.deinit() == .ok);
+pub fn main(init: std.process.Init) !void {
+    var threaded_io: std.Io.Threaded = .init(init.gpa, .{
+        .stack_size = 2 * 1024 * 1024,
+    });
+    defer threaded_io.deinit();
 
-    const Injector = http.Default_Injector;
-    var server = http.Server(Injector).init(gpa.allocator());
+    var loop: http.Loop = .init(threaded_io.io(), init.gpa);
+    defer loop.deinit();
+
+    var server = http.default_server(&loop, .{});
     defer server.deinit();
 
+    const Injector = @TypeOf(server).Injector;
     const r = http.routing;
     try server.router("", .{
         .{ "/", r.module(Injector, index) },
@@ -15,13 +21,16 @@ pub fn main() !void {
 
     try server.router("/something/**", .{
         .{ "shutdown", r.method(.GET), r.shutdown },
-        .{ "hello", r.module(Injector, hello) },
-        .{ "hello/id:*", r.module(Injector, hello) },
+        .{ "hello", r.replace_arena, r.module(Injector, hello) },
+        .{ "hello/id:*", r.replace_arena, r.module(Injector, hello) },
     });
 
-    const addr = try http.parse_hostname(gpa.allocator(), "localhost", 21345);
-    try server.start(.{ .address = addr });
-    try server.run();
+    loop.start();
+    defer loop.finish_running();
+
+    try server.lookup_and_start("localhost", 21345, .{});
+    
+    loop.begin_running();
 }
 
 const hello = struct {
@@ -41,8 +50,6 @@ const index = struct {
         try req.render("index.zk", {}, .{});
     }
 };
-
-var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
 
 pub const resources = @import("resources");
 
