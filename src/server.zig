@@ -496,7 +496,7 @@ const Handler_Context = struct {
         log.warn("{f}: " ++ msg ++ ": {}", .{ ctx.cid, err });
 
         if (maybe_trace) |trace| {
-            std.debug.dumpStackTrace(trace);
+            std.debug.dumpErrorReturnTrace(trace);
         }
 
         ctx.log_extra_errors();

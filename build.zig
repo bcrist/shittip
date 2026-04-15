@@ -25,9 +25,6 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    const optimize = b.standardOptimizeOption(.{});
-    const target = b.standardTargetOptions(.{});
-
     const tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("test.zig"),

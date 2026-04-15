@@ -460,7 +460,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
             });
         }
         if (options.trace) |ert| {
-            std.debug.dumpStackTrace(ert);
+            std.debug.dumpErrorReturnTrace(ert);
         }
         return error.Done;
     }
@@ -482,7 +482,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
         });
     }
     if (options.trace) |ert| {
-        std.debug.dumpStackTrace(ert);
+        std.debug.dumpErrorReturnTrace(ert);
     }
 
     if (!options.empty_content) {
@@ -530,7 +530,7 @@ pub fn format_err_response(self: *Request, options: Respond_Err_Options) ![]cons
             .mode = .no_color,
         };
         try w.writeAll("<pre>\n");
-        try std.debug.writeStackTrace(ert, terminal);
+        try std.debug.writeErrorReturnTrace(ert, terminal);
         try w.writeAll("</pre>\n");
     }
 
@@ -562,7 +562,7 @@ pub fn maybe_respond_err(self: *Request, options: Respond_Err_Options) !void {
             });
         }
         if (options.trace) |ert| {
-            std.debug.dumpStackTrace(ert);
+            std.debug.dumpErrorReturnTrace(ert);
         }
         return;
     }
