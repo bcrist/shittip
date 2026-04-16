@@ -28,8 +28,8 @@
             .hash = "zkittle-0.1.2-Nt34TEhSAQBZvR3tkc_b9fjgBuPQj5WsWjYasLAkEIXk",
         },
         .dizzy = .{
-            .url = "git+https://codeberg.org/bcrist/dizzy#975b1a0de2d84044319d289b33e0efaeda401e89",
-            .hash = "dizzy-0.1.0-dA4Er8Q2AABhftSvYYNdY9FCkx41jcjAPFluJbxE0h4_",
+            .url = "git+https://codeberg.org/bcrist/dizzy#6b5c6c2d16d7938a5f0dc8ef7b677066c1818e48",
+            .hash = "dizzy-0.1.1-dA4Er-g2AACK2cTTKl66z7Uk-MomyfJ1-1ggmdWQfUsk",
         },
         .fmt_helper = .{
             .url = "git+https://codeberg.org/bcrist/zig-fmthelper#275512348595e2c4dc24522c1532a0d78df325c5",
