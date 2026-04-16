@@ -16,8 +16,8 @@
             .hash = "Temp_Allocator-1.1.0-tT3p3Cg7AACYwqsy6Y64tEhmJbfkZPGd_PlCuKVWjc9S",
         },
         .tempora = .{
-            .url = "git+https://codeberg.org/bcrist/tempora#72a7461dc6bf4379ee8ba1f4884a05d4e6853ee1",
-            .hash = "tempora-0.5.0-GTyeDczxCAD6l95Jekfb89VFec6SZBQXLEMMtrHmBa0g",
+            .url = "git+https://codeberg.org/bcrist/tempora#cdcb309d16e5a50c27fceb78fa44f7f1da8954cc",
+            .hash = "tempora-0.5.1-GTyeDZDxCADcA86baun7uGaMnPlMflksdxVPYPYX-g5G",
         },
         .percent_encoding = .{
             .url = "git+https://codeberg.org/bcrist/zig-percent-encoding#6ace666491c83f5455d6ba90c915ddd15f917066",
