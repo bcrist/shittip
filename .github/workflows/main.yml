@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.14.1
+          version: latest
           mirror: 'https://zig.bcr.ist/'
       - run: zig build -Dtarget=x86_64-windows
       - run: zig build install citest
