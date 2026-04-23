@@ -355,7 +355,8 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             defer response_arena.deinit();
 
             // used for Request.handlers and Request.response.headers lists, and Request.fmt_http_date
-            var scratch_alloc = std.heap.stackFallback(comptime_options.request_scratch_buffer_bytes, response_arena.allocator());
+            var scratch_buffer: [comptime_options.request_scratch_buffer_bytes]u8 align(16) = undefined;
+            var scratch_alloc: std.heap.BufferFirstAllocator = .init(&scratch_buffer, response_arena.allocator());
 
             var request: Request = .{
                 .io = self.loop.io,
@@ -389,7 +390,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         .index = null,
                     },
                     .head_buffer = req.head_buffer,
-                    .scratch_alloc = scratch_alloc.get(),
+                    .scratch_alloc = scratch_alloc.allocator(),
                 },
             };
 
@@ -505,7 +506,7 @@ const Handler_Context = struct {
     pub fn log_extra_errors(ctx: Handler_Context) void {
         if (ctx.reader.err) |rerr| switch (rerr) {
             error.Canceled => {},
-            error.ConnectionResetByPeer, error.Timeout => {
+            error.ConnectionResetByPeer => {
                 log.debug("{f}: Failed to read request: {}", .{ ctx.cid, rerr });
             },
             else => {
