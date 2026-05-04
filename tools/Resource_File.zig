@@ -241,7 +241,7 @@ pub fn template_include(p: *Template.Parser, raw_path: []const u8) anyerror!Temp
     var full_path = raw_path;
     var path_buf_frag: [std.Io.Dir.max_path_bytes + 100]u8 = undefined;
     if (std.mem.startsWith(u8, raw_path, "#")) {
-        var base = p.include_stack.getLast().path;
+        var base = p.include_stack.getLast().?.path;
         if (std.mem.indexOfScalar(u8, base, '#')) |frag_start| {
             base = base[0..frag_start];
         }

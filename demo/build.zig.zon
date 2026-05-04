@@ -2,19 +2,19 @@
     .name = .shittip_demo,
     .fingerprint = 0x32f89c4ef259420e,
     .version = "0.0.0",
-    .minimum_zig_version = "0.16.0-dev.2626+0e3c6514a",
+    .minimum_zig_version = "0.17.0-dev.260+a79428757",
     .paths = .{""},
     .dependencies = .{
         .shittip = .{
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://codeberg.org/bcrist/tempora#cdcb309d16e5a50c27fceb78fa44f7f1da8954cc",
+            .url = "git+https://codeberg.org/bcrist/tempora#baa5d430a515a09f86ca888cf73e19df1e278a1b",
             .hash = "tempora-0.5.1-GTyeDZDxCADcA86baun7uGaMnPlMflksdxVPYPYX-g5G",
         },
         .zkittle = .{
-            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-0.16#518fcd9aba73e56d080b0a767bc9a0a08697e95c",
-            .hash = "zkittle-0.1.2-Nt34THVSAQBSeGlIujLJJM-Bh6MNuLvZvy9NKqzFrvun",
+            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#e66759d64624718665a3c9f72ea9188c9ecee466",
+            .hash = "zkittle-0.2.0-Nt34TLJQAQAn7MtOyc_st-ncrUNz3XVp32hlBH8NmsES",
         },
     },
 }
