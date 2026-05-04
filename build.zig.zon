@@ -1,8 +1,8 @@
 .{
     .name = .shittip,
     .fingerprint = 0x63f6db5671109b97,
-    .version = "0.3.1",
-    .minimum_zig_version = "0.17.0-dev.142+99b90a431",
+    .version = "0.4.0",
+    .minimum_zig_version = "0.17.0-dev.260+a79428757",
     .paths = .{
         "src",
         "tools",
@@ -24,16 +24,16 @@
             .hash = "percent_encoding-0.1.0-wAmwgBCBAACSa6CXb_D7P9MXXwQq8DQqGY2fOafsCtSB",
         },
         .zkittle = .{
-            .url = "git+https://codeberg.org/bcrist/zkittle#6a1d5e2634e7b99303b304f6233fb3048d86a7ad",
-            .hash = "zkittle-0.1.2-Nt34TEhSAQBZvR3tkc_b9fjgBuPQj5WsWjYasLAkEIXk",
+            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#e66759d64624718665a3c9f72ea9188c9ecee466",
+            .hash = "zkittle-0.2.0-Nt34TLJQAQAn7MtOyc_st-ncrUNz3XVp32hlBH8NmsES",
         },
         .dizzy = .{
             .url = "git+https://codeberg.org/bcrist/dizzy#6b5c6c2d16d7938a5f0dc8ef7b677066c1818e48",
             .hash = "dizzy-0.1.1-dA4Er-g2AACK2cTTKl66z7Uk-MomyfJ1-1ggmdWQfUsk",
         },
         .fmt_helper = .{
-            .url = "git+https://codeberg.org/bcrist/zig-fmthelper#275512348595e2c4dc24522c1532a0d78df325c5",
-            .hash = "fmt_helper-0.2.0-yH32_WFsAACpUq3X70lopCWqQEWP-qNbW8YFJ8BMNDS-",
+            .url = "git+https://codeberg.org/bcrist/zig-fmthelper#bb1172251aa56bb5eab75b4cbfa0c6f78863c4e2",
+            .hash = "fmt_helper-0.2.1-yH32_V5sAADF1sx7LkROCBNt2joIdTU_5eenKsaHYVrr",
         },
     },
 }
