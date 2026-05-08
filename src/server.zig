@@ -15,7 +15,7 @@ pub const Start_Options = struct {
     stop_loop_on_listen_failure: bool = true,
     temp_allocator_pool_size: usize = 16,
     temp_allocator_reservation_size: usize = 100 * 1024 * 1024,
-    request_timeout: ?std.Io.Duration = .fromSeconds(30), // Not yet implemented
+    request_timeout: ?std.Io.Duration = .fromSeconds(30),
 };
 
 pub const Lookup_And_Start_Options = struct {
@@ -333,8 +333,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
 
                 const timeout: std.Io.Timeout = if (request_timeout) |duration| .{ .duration = .{ .clock = .awake, .raw = duration } } else .none;
                 // TODO https://codeberg.org/ziglang/zig/issues/31098
-                _ = timeout;
-                var proc = self.loop.io.concurrent(process_request, .{ self, ctx, request }) catch {
+                var proc = self.loop.io.concurrent(process_request, .{ self, ctx, request, timeout }) catch {
                     log.info("{f}: Closing connection (insufficient concurrency available)", .{ cid });
                     return ctx.propagate_cancel();
                 };
@@ -345,10 +344,31 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             }
         }
 
-        fn process_request(self: *Self, ctx: Handler_Context, req: std.http.Server.Request) std.Io.Cancelable!void {
+        fn process_request(self: *Self, ctx: Handler_Context, req: std.http.Server.Request, timeout: std.Io.Timeout) std.Io.Cancelable!void {
             log.debug("{f}: {t} {s}", .{ ctx.cid, req.head.method, req.head.target });
             defer log.debug("{f}: Finished processing request", .{ ctx.cid });
 
+            const Result = union (enum) {
+                request: std.Io.Cancelable!void,
+                timeout: std.Io.Cancelable!void,
+            };
+
+            var buf: [2]Result = undefined;
+            var select: std.Io.Select(Result) = .init(self.loop.io, &buf);
+            defer select.cancelDiscard();
+
+            select.concurrent(.timeout, std.Io.Timeout.sleep, .{ timeout, self.loop.io }) catch {
+                log.warn("Failed to start timeout task for {f}", .{ ctx.cid });
+            };
+            select.async(.request, process_request_inner, .{ self, ctx, req });
+
+            switch (try select.await()) {
+                .request => |result| return result,
+                .timeout => |result| return result,
+            }
+        }
+
+        fn process_request_inner(self: *Self, ctx: Handler_Context, req: std.http.Server.Request) std.Io.Cancelable!void {
             const dt = tempora.now(self.loop.io).dt;
 
             var response_arena: std.heap.ArenaAllocator = .init(self.loop.gpa);
