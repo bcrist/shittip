@@ -16,20 +16,20 @@
             .hash = "Temp_Allocator-1.1.0-tT3p3Cg7AACYwqsy6Y64tEhmJbfkZPGd_PlCuKVWjc9S",
         },
         .tempora = .{
-            .url = "git+https://codeberg.org/bcrist/tempora#cdcb309d16e5a50c27fceb78fa44f7f1da8954cc",
-            .hash = "tempora-0.5.1-GTyeDZDxCADcA86baun7uGaMnPlMflksdxVPYPYX-g5G",
+            .url = "git+https://codeberg.org/bcrist/tempora?ref=zig-master#c1bfe56ee5434fe4c784aafdef1c30f50448cb61",
+            .hash = "tempora-0.6.2-GTyeDY_HFgDv3d3a7KHrig4CCPbGAX3a6jR7jxHN9BNM",
         },
         .percent_encoding = .{
             .url = "git+https://codeberg.org/bcrist/zig-percent-encoding#6ace666491c83f5455d6ba90c915ddd15f917066",
             .hash = "percent_encoding-0.1.0-wAmwgBCBAACSa6CXb_D7P9MXXwQq8DQqGY2fOafsCtSB",
         },
         .zkittle = .{
-            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#e66759d64624718665a3c9f72ea9188c9ecee466",
-            .hash = "zkittle-0.2.0-Nt34TLJQAQAn7MtOyc_st-ncrUNz3XVp32hlBH8NmsES",
+            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#8716525aacaf21704a2bf2a6c3e4014fc0d144ea",
+            .hash = "zkittle-0.2.1-Nt34TBZTAQDRQjp-31UOt5rwlLw8g3Bi1p1KDphex9Sv",
         },
         .dizzy = .{
-            .url = "git+https://codeberg.org/bcrist/dizzy#6b5c6c2d16d7938a5f0dc8ef7b677066c1818e48",
-            .hash = "dizzy-0.1.1-dA4Er-g2AACK2cTTKl66z7Uk-MomyfJ1-1ggmdWQfUsk",
+            .url = "git+https://codeberg.org/bcrist/dizzy?ref=zig-master#7d5d82ed83001a9c236402348f744fb3d6bdb5c8",
+            .hash = "dizzy-0.1.2-dA4Er_Q3AABKGgC6BcOCXmOFgxJ1axa9VdAVtHVZPOo9",
         },
         .fmt_helper = .{
             .url = "git+https://codeberg.org/bcrist/zig-fmthelper#bb1172251aa56bb5eab75b4cbfa0c6f78863c4e2",
