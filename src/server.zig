@@ -369,7 +369,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
         }
 
         fn process_request_inner(self: *Self, ctx: Handler_Context, req: std.http.Server.Request) std.Io.Cancelable!void {
-            const dt = tempora.now(self.loop.io).dt;
+            const dt = tempora.now(self.loop.io, &tempora.Timezone.utc).dt;
 
             var response_arena: std.heap.ArenaAllocator = .init(self.loop.gpa);
             defer response_arena.deinit();

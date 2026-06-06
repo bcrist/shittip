@@ -1,7 +1,7 @@
 .{
     .name = .shittip,
     .fingerprint = 0x63f6db5671109b97,
-    .version = "0.3.2",
+    .version = "0.3.3",
     .minimum_zig_version = "0.16.0",
     .paths = .{
         "src",
@@ -16,8 +16,8 @@
             .hash = "Temp_Allocator-1.1.0-tT3p3Cg7AACYwqsy6Y64tEhmJbfkZPGd_PlCuKVWjc9S",
         },
         .tempora = .{
-            .url = "git+https://codeberg.org/bcrist/tempora#cdcb309d16e5a50c27fceb78fa44f7f1da8954cc",
-            .hash = "tempora-0.5.1-GTyeDZDxCADcA86baun7uGaMnPlMflksdxVPYPYX-g5G",
+            .url = "git+https://codeberg.org/bcrist/tempora#829d6263f2f00603e4b243c3276aa5ae25368e59",
+            .hash = "tempora-0.6.2-GTyeDSLHFgAB89aGD0C1RH_oTiB4W-o5SpudWRVtrh5X",
         },
         .percent_encoding = .{
             .url = "git+https://codeberg.org/bcrist/zig-percent-encoding#6ace666491c83f5455d6ba90c915ddd15f917066",
