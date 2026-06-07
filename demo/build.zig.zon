@@ -9,8 +9,8 @@
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://codeberg.org/bcrist/tempora?ref=zig-master#c1bfe56ee5434fe4c784aafdef1c30f50448cb61",
-            .hash = "tempora-0.6.2-GTyeDY_HFgDv3d3a7KHrig4CCPbGAX3a6jR7jxHN9BNM",
+            .url = "git+https://codeberg.org/bcrist/tempora?ref=zig-master#ba66c380f5f237eaca4c42aff037ca08068fb3b9",
+            .hash = "tempora-0.6.2-GTyeDfXJFgC3i8mQGMAK04HdiBxvwM2jVGdIR4Sbf2RD",
         },
         .zkittle = .{
             .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#8716525aacaf21704a2bf2a6c3e4014fc0d144ea",
