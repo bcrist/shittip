@@ -77,7 +77,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
         }
 
         pub fn deinit(self: *Self) void {
-            if (@typeInfo(Injector_Context) == .@"struct" and @hasDecl(Injector_Context, "deinit") and @typeInfo(@TypeOf(Injector_Context.deinit)).@"fn".params.len == 1) {
+            if (@typeInfo(Injector_Context) == .@"struct" and @hasDecl(Injector_Context, "deinit") and @typeInfo(@TypeOf(Injector_Context.deinit)).@"fn".param_types.len == 1) {
                 self.injector_context.deinit();
             }
 

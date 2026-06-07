@@ -13,8 +13,8 @@
             .hash = "tempora-0.6.2-GTyeDfXJFgC3i8mQGMAK04HdiBxvwM2jVGdIR4Sbf2RD",
         },
         .zkittle = .{
-            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#8716525aacaf21704a2bf2a6c3e4014fc0d144ea",
-            .hash = "zkittle-0.2.1-Nt34TBZTAQDRQjp-31UOt5rwlLw8g3Bi1p1KDphex9Sv",
+            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#38937ada8f6191c9d6a56c35998bbb03289c2ef0",
+            .hash = "zkittle-0.2.2-Nt34TBtTAQAnCyOlCsJQgmfCSgss2fs_ACzeqpE609Du",
         },
     },
 }
