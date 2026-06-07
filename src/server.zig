@@ -28,7 +28,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
     const Injector_Context = if (Injector_Type.Input == *Request) void else T: {
         const Input = Injector_Type.Input;
         const info = @typeInfo(Input);
-        if (info != .@"struct" or info.@"struct".fields.len != 2 or !@hasField(Input, "request") or !@hasField(Input, "context") or @FieldType(Input, "request") != *Request) {
+        if (info != .@"struct" or info.@"struct".field_names.len != 2 or !@hasField(Input, "request") or !@hasField(Input, "context") or @FieldType(Input, "request") != *Request) {
             @compileError("Injector.Input must be `*http.Request` or `struct { request: *http.Request, context: *T }`");
         }
         const ptr_info = @typeInfo(@FieldType(Input, "context"));
