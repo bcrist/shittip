@@ -9,8 +9,8 @@
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://codeberg.org/bcrist/tempora#829d6263f2f00603e4b243c3276aa5ae25368e59",
-            .hash = "tempora-0.6.2-GTyeDSLHFgAB89aGD0C1RH_oTiB4W-o5SpudWRVtrh5X",
+            .url = "git+https://codeberg.org/bcrist/tempora#eadb2f92e59f4ee7a54bf99d574d643b706ef0fa",
+            .hash = "tempora-0.6.2-GTyeDYjJFgBs1HNw-Po6mg7n0n_-oipch9GwSX6MFXwr",
         },
         .zkittle = .{
             .url = "git+https://codeberg.org/bcrist/zkittle#bf3897cc64c1348b34dee73cc9a956bcdcc91942",
