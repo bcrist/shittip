@@ -351,7 +351,7 @@ pub fn maybe_add_common_response_headers_comptime(self: *Request, comptime heade
     const DTO = tempora.Date_Time.With_Offset;
 
     if (headers.date_utc) |dt| {
-        const str = std.fmt.comptimePrint("{f}", .{ dt.with_offset(0).fmt(DTO.http) });
+        const str = std.fmt.comptimePrint("{f}", .{ comptime dt.with_offset(0).fmt(DTO.http) });
         _ = try self.maybe_add_response_header("date", str);
     }
     if (headers.content_type) |ct| {
@@ -367,7 +367,7 @@ pub fn maybe_add_common_response_headers_comptime(self: *Request, comptime heade
         _ = try self.maybe_add_response_header("etag", "\"" ++ etag ++ "\"");
     }
     if (headers.last_modified_utc) |dt| {
-        const str = std.fmt.comptimePrint("{f}", .{ dt.with_offset(0).fmt(DTO.http) });
+        const str = std.fmt.comptimePrint("{f}", .{ comptime dt.with_offset(0).fmt(DTO.http) });
         _ = try self.maybe_add_response_header("last-modified", str);
     }
 }
