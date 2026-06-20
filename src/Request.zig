@@ -339,6 +339,128 @@ pub fn get_response_header(self: *Request, name: []const u8) ?[]const u8 {
     return null;
 }
 
+pub const Common_Response_Headers = struct {
+    date_utc: ?tempora.Date_Time = null,
+    content_type: ?Content_Type = null,
+    content_disposition: ?Content_Disposition = null,
+    cache_control: ?[]const u8 = null,
+    etag: ?[]const u8 = null,
+    last_modified_utc: ?tempora.Date_Time = null,
+};
+pub fn maybe_add_common_response_headers_comptime(self: *Request, comptime headers: Common_Response_Headers) !void {
+    const DTO = tempora.Date_Time.With_Offset;
+
+    if (headers.date_utc) |dt| {
+        const str = std.fmt.comptimePrint("{f}", .{ dt.with_offset(0).fmt(DTO.http) });
+        _ = try self.maybe_add_response_header("date", str);
+    }
+    if (headers.content_type) |ct| {
+        _ = try self.maybe_add_response_header("content-type", ct.to_string());
+    }
+    if (headers.content_disposition) |cd| {
+        _ = try self.maybe_add_response_header("content-disposition", cd.to_string());
+    }
+    if (headers.cache_control) |cc| {
+        _ = try self.maybe_add_response_header("cache-control", cc);
+    }
+    if (headers.etag) |etag| {
+        _ = try self.maybe_add_response_header("etag", "\"" ++ etag ++ "\"");
+    }
+    if (headers.last_modified_utc) |dt| {
+        const str = std.fmt.comptimePrint("{f}", .{ dt.with_offset(0).fmt(DTO.http) });
+        _ = try self.maybe_add_response_header("last-modified", str);
+    }
+}
+
+pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Response_Headers) !void {
+    try self.ensure_response_not_started();
+
+    if (headers.date_utc) |dt| {
+        if (self.get_response_header("date") == null) {
+            try self.response.headers.append(self.internal.scratch_alloc, .{
+                .name = "date",
+                .value = try self.fmt_http_date(dt),
+            });
+        }
+    }
+    if (headers.content_type) |ct| {
+        if (self.get_response_header("content-type") == null) {
+            try self.response.headers.append(self.internal.scratch_alloc, .{
+                .name = "content-type",
+                .value = try self.fmt("{f}", .{ ct }),
+            });
+        }
+    }
+    if (headers.content_disposition) |cd| {
+        if (self.get_response_header("content-disposition") == null) {
+            try self.response.headers.append(self.internal.scratch_alloc, .{
+                .name = "content-disposition",
+                .value = try self.fmt("{f}", .{ cd }),
+            });
+        }
+    }
+    if (headers.cache_control) |cc| {
+        _ = try self.maybe_add_response_header("cache-control", cc);
+    }
+    if (headers.etag) |etag| {
+        if (self.get_response_header("etag") == null) {
+            try self.response.headers.append(self.internal.scratch_alloc, .{
+                .name = "etag",
+                .value = try self.fmt("\"{s}\"", .{ etag }),
+            });
+        }
+    }
+    if (headers.last_modified_utc) |dt| {
+        if (self.get_response_header("last-modified") == null) {
+            try self.response.headers.append(self.internal.scratch_alloc, .{
+                .name = "last-modified",
+                .value = try self.fmt_http_date(dt),
+            });
+        }
+    }
+}
+
+pub fn maybe_add_common_response_headers_and_check_not_modified(self: *Request, headers: Common_Response_Headers) !void {
+    try self.maybe_add_common_response_headers(headers);
+    try self.check_not_modified(headers.last_modified_utc, headers.etag);
+}
+
+pub fn check_not_modified(self: *Request, maybe_last_modified_utc: ?tempora.Date_Time, maybe_etag: ?[]const u8) !void {
+    const DTO = tempora.Date_Time.With_Offset;
+
+    if (maybe_last_modified_utc == null and maybe_etag == null) return;
+
+    var not_modified_by_date: ?bool = null;
+    var not_modified_by_etag: ?bool = null;
+
+    var iter = self.header_iterator();
+    while (iter.next()) |header| {
+        if (maybe_last_modified_utc) |last_modified| {
+            if (std.ascii.eqlIgnoreCase(header.name, "if-modified-since")) {
+                const last_seen = DTO.from_string(DTO.http, header.value) catch continue;
+                std.debug.assert(last_seen.utc_offset_ms == 0);
+                not_modified_by_date = !last_seen.dt.is_before(last_modified);
+            }
+        }
+        if (maybe_etag) |etag| {
+            if (std.ascii.eqlIgnoreCase(header.name, "if-none-match")) {
+                var inm_iter: ETag_Iterator = .{ .remaining = header.value };
+                not_modified_by_etag = while (try inm_iter.next()) |entry| {
+                    if (std.mem.eql(u8, entry.value, etag)) {
+                        break true;
+                    }
+                } else false;
+            }
+        }
+    }
+
+    const allow_cache = if (self.get_response_header("cache-control")) |header| !std.mem.eql(u8, header, "no-cache") else true;
+
+    if (allow_cache and (not_modified_by_etag orelse not_modified_by_date orelse false)) {
+        return error.NotModified;
+    }
+}
+
 pub fn check_and_add_last_modified(self: *Request, last_modified_utc: tempora.Date_Time) !void {
     try self.add_response_header("last-modified", try self.fmt_http_date(last_modified_utc));
     if (self.get_header("if-modified-since")) |header| {
@@ -346,9 +468,7 @@ pub fn check_and_add_last_modified(self: *Request, last_modified_utc: tempora.Da
         if (DTO.from_string(DTO.http, header.value)) |last_seen| {
             std.debug.assert(last_seen.utc_offset_ms == 0);
             if (!last_seen.dt.is_before(last_modified_utc)) {
-                self.response_status = .not_modified;
-                try self.respond("");
-                return error.Done;
+                return error.NotModified;
             }
         } else |_| {
             log.debug("Could not parse if-modified-since date: {s}", .{ header.value });
@@ -606,6 +726,8 @@ const Query_Iterator = @import("Query_Iterator.zig");
 const Query_Reader = @import("Query_Reader.zig");
 const Connection_Id = @import("Connection_Id.zig");
 const Content_Type = @import("content_type.zig").Content_Type;
+const Content_Disposition = @import("content_disposition.zig").Content_Disposition;
+const ETag_Iterator = @import("ETag_Iterator.zig");
 const Loop = @import("Loop.zig");
 const Index_Pool = @import("Index_Pool.zig");
 const routing = @import("routing.zig");

@@ -194,52 +194,19 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
                 else => return error.MethodNotAllowed,
             }
 
-            const DTO = tempora.Date_Time.With_Offset;
+            try req.try_set_date();
 
-            if (options.content_type) |ct| {
-                _ = try req.maybe_add_response_header("content-type", ct.to_string());
-            }
-            if (options.content_disposition) |cd| {
-                _ = try req.maybe_add_response_header("content-disposition", cd.to_string());
-            }
-            if (options.cache_control) |cc| {
-                _ = try req.maybe_add_response_header("cache-control", cc);
-            }
-            if (options.etag) |etag| {
-                _ = try req.maybe_add_response_header("etag", "\"" ++ etag ++ "\"");
-            }
-            if (options.last_modified_utc) |dt| {
-                _ = try req.maybe_add_response_header("last-modified", comptime std.fmt.comptimePrint("{f}", .{ dt.with_offset(0).fmt(DTO.http) }));
-            }
+            try req.maybe_add_common_response_headers_comptime(.{
+                .content_type = options.content_type,
+                .content_disposition = options.content_disposition,
+                .cache_control = options.cache_control,
+                .etag = options.etag,
+                .last_modified_utc = options.last_modified_utc,
+            });
 
-            var not_modified_by_date: ?bool = null;
-            var not_modified_by_etag: ?bool = null;
+            try req.check_not_modified(options.last_modified_utc, options.etag);
 
-            var iter = req.header_iterator();
-            while (iter.next()) |header| {
-                if (options.last_modified_utc) |last_modified| {
-                    if (std.ascii.eqlIgnoreCase(header.name, "if-modified-since")) {
-                        const last_seen = DTO.from_string(DTO.http, header.value) catch continue;
-                        not_modified_by_date = !last_seen.dt.is_before(last_modified);
-                    }
-                }
-                if (options.etag) |etag| {
-                    if (std.ascii.eqlIgnoreCase(header.name, "if-none-match")) {
-                        var inm_iter: ETag_Iterator = .{ .remaining = header.value };
-                        not_modified_by_etag = while (try inm_iter.next()) |entry| {
-                            if (std.mem.eql(u8, entry.value, etag)) {
-                                break true;
-                            }
-                        } else false;
-                    }
-                }
-            }
-
-            const allow_cache = if (req.get_response_header("cache-control")) |header| !std.mem.eql(u8, header, "no-cache") else true;
-
-            if (allow_cache and (not_modified_by_etag orelse not_modified_by_date orelse false)) {
-                return error.NotModified;
-            } else if (req.check_accept_encoding(options.content_encoding)) {
+            if (req.check_accept_encoding(options.content_encoding)) {
                 try req.set_response_header("content-encoding", @tagName(options.content_encoding));
                 try req.respond(options.content);
             } else {
