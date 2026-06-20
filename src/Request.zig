@@ -112,9 +112,9 @@ pub fn replace_arena(self: *Request) error{InsufficientResources}!void {
     }
 }
 
-fn try_set_date(self: *Request) !void {
+pub fn try_set_date(self: *Request) !void {
     if (self.response.state == .not_started) {
-        try self.maybe_add_response_header("date", try self.fmt_http_date(self.received_dt));
+        _ = try self.maybe_add_response_header("date", try self.fmt_http_date(self.received_dt));
     }
 }
 
