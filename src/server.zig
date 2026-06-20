@@ -445,19 +445,22 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 try ctx.propagate_cancel();
 
                 if (status_from_error(err)) |status| {
-                    request.maybe_respond_err(.{ .status = status }) catch |response_err| {
+                    request.maybe_respond_err(.{
+                        .status = status,
+                        .empty_content = status == .not_modified,
+                        .trace = @errorReturnTrace(),
+                    }) catch |response_err| {
                         ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
                         ctx.server.reader.state = .closing;
                     };
                 } else if (err != error.Done) {
-                    request.maybe_respond_err(switch (err) {
-                        error.Canceled, error.InsufficientResources, error.OutOfMemory => .{
-                            .status = .service_unavailable,
+                    request.maybe_respond_err(.{
+                        .status = switch (err) {
+                            error.Canceled, error.InsufficientResources, error.OutOfMemory => .service_unavailable,
+                            else => .internal_server_error,
                         },
-                        else => .{
-                            .err = err,
-                            .trace = @errorReturnTrace(),
-                        },
+                        .err = err,
+                        .trace = @errorReturnTrace(),
                     }) catch |response_err| {
                         ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
                         ctx.server.reader.state = .closing;
@@ -478,6 +481,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
 
 fn status_from_error(err: anyerror) ?std.http.Status {
     return switch (err) {
+        error.NotModified => .not_modified,
         error.BadRequest => .bad_request,
         error.Unauthorized => .unauthorized,
         error.Forbidden => .forbidden,

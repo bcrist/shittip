@@ -238,8 +238,7 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
             const allow_cache = if (req.get_response_header("cache-control")) |header| !std.mem.eql(u8, header, "no-cache") else true;
 
             if (allow_cache and (not_modified_by_etag orelse not_modified_by_date orelse false)) {
-                req.response.status = .not_modified;
-                try req.respond("");
+                return error.NotModified;
             } else if (req.check_accept_encoding(options.content_encoding)) {
                 try req.set_response_header("content-encoding", @tagName(options.content_encoding));
                 try req.respond(options.content);
