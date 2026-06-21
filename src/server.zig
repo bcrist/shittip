@@ -505,6 +505,7 @@ fn status_from_error(err: anyerror) ?std.http.Status {
         error.InternalServerError => .internal_server_error,
         error.NotImplemented => .not_implemented,
         error.ServiceUnavailable => .service_unavailable,
+        error.BadGateway => .bad_gateway,
         error.GatewayTimeout => .gateway_timeout,
         error.InsufficientStorage => .insufficient_storage,
         else => null,
