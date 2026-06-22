@@ -34,6 +34,24 @@ pub fn add(self: *Loop, tasks: *Server_Tasks) !usize {
     return self.servers.items.len;
 }
 
+pub fn concurrent(self: *Loop, function: anytype, args: std.meta.ArgsTuple(@TypeOf(function))) !void {
+    try self.servers_mutex.lock(self.io);
+    defer self.servers_mutex.unlock(self.io);
+
+    switch (self.state()) {
+        .starting, .running => {},
+        .stopping, .stopped => return error.NotRunning,
+    }
+
+    if (self.servers.items.len == 0) return error.NoServers;
+    const tasks = self.servers.items[0];
+
+    try tasks.mutex.lock(self.io);
+    defer tasks.mutex.unlock(self.io);
+
+    try tasks.group.concurrent(self.io, function, args);
+}
+
 pub fn state(self: *const Loop) State {
     return @atomicLoad(State, &self.s, .acquire);
 }

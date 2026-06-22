@@ -283,7 +283,14 @@ pub fn shutdown(req: *Request, loop: *Loop) !void {
     try req.set_response_header("cache-control", "no-cache");
     req.response.keep_alive = false;
     try req.respond("");
-    try loop.servers.items[0].group.concurrent(loop.io, stop, .{ loop });
+    loop.concurrent(stop, .{ loop }) catch |err| switch (err) {
+        error.Canceled => |e| return e,
+        error.NotRunning => {},
+        error.NoServers => unreachable,
+        error.ConcurrencyUnavailable => {
+            loop.stop();
+        },
+    };
 }
 
 pub fn stop(loop: *Loop) error{Canceled}!void {
