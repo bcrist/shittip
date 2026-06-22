@@ -32,7 +32,7 @@ pub fn next(self: *@This()) !?Result {
         remaining = remaining[end + 1 ..];
     } else return error.BadRequest;
 
-    remaining = std.mem.trimStart(u8, self.remaining, &std.ascii.whitespace);
+    remaining = std.mem.trimStart(u8, remaining, &std.ascii.whitespace);
 
     if (std.mem.startsWith(u8, remaining, ",")) {
         remaining = remaining[1..];
