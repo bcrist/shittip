@@ -576,6 +576,8 @@ pub fn response_writer_ranged(self: *Request, content_length: usize, options: Mu
 
 fn make_response_writer_ranged(self: *Request, content_length: usize, body_writer: std.http.BodyWriter, iterator: Range.Iterator, options: Multipart_Options) !*std.Io.Writer {
     if (self.response.status != .ok) return try self.response_writer();
+    
+    std.debug.assert(self.response.state == .streaming);
 
     const allocator = self.arena();
 
@@ -615,6 +617,7 @@ fn make_response_writer_ranged(self: *Request, content_length: usize, body_write
             bw.* = body_writer;
             rw.* = Range.Writer.init(&bw.writer, content_length, ranges, options.boundary, content_type, buf);
 
+            self.response.state = .{ .ranged_streaming = &rw.interface };
             return &rw.interface;
         }            
     } else |err| switch (err) {
