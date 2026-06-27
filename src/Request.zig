@@ -557,24 +557,18 @@ const Multipart_Options = struct {
 pub fn response_writer_ranged(self: *Request, content_length: usize, options: Multipart_Options) !*std.Io.Writer {
     switch (self.response.state) {
         .not_started => {
-            const writer = try self.response_writer();
             if (try self.range("bytes", options.ignore_bad_range)) |iterator| {
-                return try self.make_response_writer_ranged(content_length, self.response.state.streaming, iterator, options);
+                return try self.make_response_writer_ranged(content_length, iterator, options);
             }
-            return writer;
+            return try self.response_writer();
         },
-        .streaming => |*writer| {
-            if (try self.range("bytes", options.ignore_bad_range)) |iterator| {
-                return try self.make_response_writer_ranged(content_length, writer.*, iterator, options);
-            }
-            return &writer.writer;
-        },
+        .streaming => return error.ResponseAlreadyStarted,
         .ranged_streaming => |writer| return writer,
         .sent => return error.ResponseAlreadySent,
     }
 }
 
-fn make_response_writer_ranged(self: *Request, content_length: usize, body_writer: std.http.BodyWriter, iterator: Range.Iterator, options: Multipart_Options) !*std.Io.Writer {
+fn make_response_writer_ranged(self: *Request, content_length: usize, iterator: Range.Iterator, options: Multipart_Options) !*std.Io.Writer {
     if (self.response.status != .ok) return try self.response_writer();
     
     std.debug.assert(self.response.state == .streaming);
@@ -588,10 +582,6 @@ fn make_response_writer_ranged(self: *Request, content_length: usize, body_write
                 return error.RangeNotSatisfiable;
             }
         } else {
-            self.response.status = .partial_content;
-            self.response.content_length = null;
-            var content_type: []const u8 = "";
-
             const buf = allocator.alloc(u8, self.response.buffer_bytes) catch {
                 return try self.response_writer();
             };
@@ -607,6 +597,10 @@ fn make_response_writer_ranged(self: *Request, content_length: usize, body_write
             };
             errdefer allocator.destroy(rw);
 
+            self.response.status = .partial_content;
+            self.response.content_length = null;
+            var content_type: []const u8 = "";
+
             if (ranges.len == 1) {
                 try ranges[0].set_header(content_length, self);
             } else {
@@ -614,7 +608,9 @@ fn make_response_writer_ranged(self: *Request, content_length: usize, body_write
                 try self.set_response_header("content-type", try self.fmt("multipart/byteranges; boundary={s}", .{ options.boundary }));
             }
 
-            bw.* = body_writer;
+            _ = try self.response_writer();
+
+            bw.* = self.response.state.streaming;
             rw.* = Range.Writer.init(&bw.writer, content_length, ranges, options.boundary, content_type, buf);
 
             self.response.state = .{ .ranged_streaming = &rw.interface };
