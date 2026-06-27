@@ -21,8 +21,8 @@ pub fn main(init: std.process.Init) !void {
 
     try server.router("/something/**", .{
         .{ "shutdown", r.method(.GET), r.shutdown },
-        .{ "hello", r.replace_arena, r.module(Injector, hello) },
-        .{ "hello/id:*", r.replace_arena, r.module(Injector, hello) },
+        .{ "hello", r.module(Injector, hello) },
+        .{ "hello/id:*", r.module(Injector, hello) },
     });
 
     loop.start();

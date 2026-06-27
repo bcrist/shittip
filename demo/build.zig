@@ -1,7 +1,9 @@
 pub fn build(b: *std.Build) void {
     const resources = shittip.resources(b, &.{
         .{ .path = "resources" },
-    }, .{});
+    }, .{
+        .install = "resources",
+    });
 
     const exe = b.addExecutable(.{
         .name = "demo",

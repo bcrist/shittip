@@ -1,7 +1,7 @@
 .{
     .name = .shittip,
     .fingerprint = 0x63f6db5671109b97,
-    .version = "0.4.8",
+    .version = "0.5.0",
     .minimum_zig_version = "0.17.0-dev.260+a79428757",
     .paths = .{
         "src",
@@ -12,8 +12,8 @@
     },
     .dependencies = .{
         .Temp_Allocator = .{
-            .url = "git+https://codeberg.org/bcrist/zig-tempallocator#9b87ba43643d50b6b1a81b170e61d5dab2c786a5",
-            .hash = "Temp_Allocator-1.1.0-tT3p3Cg7AACYwqsy6Y64tEhmJbfkZPGd_PlCuKVWjc9S",
+            .url = "git+https://codeberg.org/bcrist/zig-tempallocator#a2cce90653e90229ef0b5b524d5836f4109166c7",
+            .hash = "Temp_Allocator-1.2.1-tT3p3FNPAADSDF24Ply7XloHNoGgB4e9UyC4wc188yul",
         },
         .tempora = .{
             .url = "git+https://codeberg.org/bcrist/tempora?ref=zig-master#ba66c380f5f237eaca4c42aff037ca08068fb3b9",

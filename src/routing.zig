@@ -1,4 +1,4 @@
-pub const Alloc_Handler = *const fn(allocator: std.mem.Allocator, req: *Request) anyerror!void;
+pub const Alloc_Handler = *const fn (allocator: std.mem.Allocator, req: *Request) anyerror!void;
 
 pub fn router(svr: anytype, comptime prefix: []const u8, comptime routes: anytype) !void {
     comptime var prefix_routes_list: []const []const u8 = &.{};
@@ -22,18 +22,17 @@ pub fn router(svr: anytype, comptime prefix: []const u8, comptime routes: anytyp
             }
         }
         if (comptime std.mem.endsWith(u8, path, "**")) {
-            prefix_routes_list = prefix_routes_list ++ .{ path };
+            prefix_routes_list = prefix_routes_list ++ .{path};
         } else {
-            exact_routes_list = exact_routes_list ++ .{ .{ path } };
+            exact_routes_list = exact_routes_list ++ .{.{path}};
         }
     }
 
     const final_prefix_routes_list = prefix_routes_list[0..].*;
 
     try svr.register(prefix, struct {
-
         const exact_routes: std.StaticStringMap(void) = .initComptime(exact_routes_list);
-        
+
         pub fn route(allocator: std.mem.Allocator, req: *Request) anyerror!void {
             var path = req.target.path_remaining;
 
@@ -138,7 +137,6 @@ pub fn router(svr: anytype, comptime prefix: []const u8, comptime routes: anytyp
             const path = req.target.path_remaining;
             return path[path.len - chars_to_keep .. path.len];
         }
-
     }.route);
 }
 
@@ -154,6 +152,7 @@ pub fn resource_with_content_type(comptime source_path: []const u8, comptime ct:
         resource_path(source_path),
         static_internal(.{
             .content = resource_compressed_content(source_path),
+            .uncompressed_length = resource_uncompressed_length(source_path),
             .content_encoding = .deflate,
             .content_type = ct,
             .cache_control = "max-age=31536000, immutable, public",
@@ -172,12 +171,17 @@ pub fn resource_compressed_content(comptime source_path: []const u8) []const u8 
     return @field(root.resources.content, source_path);
 }
 
+pub fn resource_uncompressed_length(comptime source_path: []const u8) usize {
+    return @field(root.resources.uncompressed_length, source_path);
+}
+
 pub fn resource_etag(comptime source_path: []const u8) []const u8 {
     return @field(root.resources, source_path);
 }
 
 const Static_Internal_Route_Options = struct {
     content: []const u8,
+    uncompressed_length: ?usize = null,
     content_encoding: std.http.ContentEncoding = .identity,
     content_disposition: ?Content_Disposition = null,
     content_type: ?Content_Type = null,
@@ -187,6 +191,16 @@ const Static_Internal_Route_Options = struct {
     method: std.http.Method = .GET,
 };
 pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Handler {
+    const boundary_short = "VoaQ19Q";
+    const boundary_long = "KAdQK0kyGAQzGAgaIjELGEc8GzQ1Y1o1JVpYG1wuXBI3TiA2NwFCMiZjHRMpJzMDXlhfQzU9Khs9TTM6EVZZXSkTNipcHVtEPVQWD00NFFkQFVpUY049FA0ZK0EeWgI8";
+    comptime var multipart_boundary: ?[]const u8 = null;
+    if (options.content_encoding != .identity and options.uncompressed_length == null) {
+        // disable ranged responses
+    } else if (std.mem.find(u8, options.content, boundary_short) == null) {
+        multipart_boundary = boundary_short;
+    } else if (!std.mem.find(u8, options.content, boundary_long)) {
+        multipart_boundary = boundary_long;
+    }
     return struct {
         pub fn handler(arena: std.mem.Allocator, req: *Request) anyerror!void {
             switch (req.req.head.method) {
@@ -208,7 +222,11 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
 
             if (req.check_accept_encoding(options.content_encoding)) {
                 try req.set_response_header("content-encoding", @tagName(options.content_encoding));
-                try req.respond(options.content);
+                if (multipart_boundary) |boundary| {
+                    try req.respond_ranged(options.content, .{ .boundary = boundary });
+                } else {
+                    try req.respond(options.content);
+                }
             } else {
                 var compressed_reader = std.Io.Reader.fixed(options.content);
                 var decompress: std.http.Decompress = undefined;
@@ -231,13 +249,16 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
                     else => return error.NotAcceptable,
                 };
 
-                _ = try reader.streamRemaining(try req.response_writer());
+                const writer = if (multipart_boundary) |_| w: {
+                    break :w try req.response_writer_ranged(options.uncompressed_length.?, .{ .boundary = boundary_long });
+                } else try req.response_writer();
+                _ = try reader.streamRemaining(writer);
             }
         }
     }.handler;
 }
 
-pub fn module(comptime Injector: type, comptime M: type) *const fn(*Request, Injector.Input) anyerror!void {
+pub fn module(comptime Injector: type, comptime M: type) *const fn (*Request, Injector.Input) anyerror!void {
     return struct {
         pub fn handler(req: *Request, in: Injector.Input) anyerror!void {
             switch (req.req.head.method) {
@@ -261,15 +282,15 @@ pub fn module(comptime Injector: type, comptime M: type) *const fn(*Request, Inj
     }.handler;
 }
 
-pub fn Module(comptime Injector: type) *const fn(comptime M: type) *const fn(*Request, Injector.Input) anyerror!void {
+pub fn Module(comptime Injector: type) *const fn (comptime M: type) *const fn (*Request, Injector.Input) anyerror!void {
     return struct {
-        pub fn m(comptime M: type) *const fn(*Request, Injector.Input) anyerror!void {
+        pub fn m(comptime M: type) *const fn (*Request, Injector.Input) anyerror!void {
             return module(Injector, M);
         }
     }.m;
 }
 
-pub fn method(comptime required_method: std.http.Method) *const fn(*Request) anyerror!void {
+pub fn method(comptime required_method: std.http.Method) *const fn (*Request) anyerror!void {
     return struct {
         pub fn handler(req: *Request) !void {
             if (req.req.head.method != required_method) {
@@ -283,7 +304,7 @@ pub fn shutdown(req: *Request, loop: *Loop) !void {
     try req.set_response_header("cache-control", "no-cache");
     req.response.keep_alive = false;
     try req.respond("");
-    loop.concurrent(stop, .{ loop }) catch |err| switch (err) {
+    loop.concurrent(stop, .{loop}) catch |err| switch (err) {
         error.Canceled => |e| return e,
         error.NotRunning => {},
         error.NoServers => unreachable,
@@ -296,10 +317,6 @@ pub fn shutdown(req: *Request, loop: *Loop) !void {
 pub fn stop(loop: *Loop) error{Canceled}!void {
     try loop.io.sleep(.fromMilliseconds(100), .real);
     loop.stop();
-}
-
-pub fn replace_arena(req: *Request) !void {
-    try req.replace_arena();
 }
 
 inline fn maybe_string(ptr: anytype) ?[]const u8 {

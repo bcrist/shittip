@@ -371,16 +371,10 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
         fn process_request_inner(self: *Self, ctx: Handler_Context, req: std.http.Server.Request) std.Io.Cancelable!void {
             const dt = tempora.now(self.loop.io, &tempora.Timezone.utc).dt;
 
-            var response_arena: std.heap.ArenaAllocator = .init(self.loop.gpa);
-            defer response_arena.deinit();
-
-            // used for Request.handlers and Request.response.headers lists, and Request.fmt_http_date
             var scratch_buffer: [comptime_options.request_scratch_buffer_bytes]u8 align(16) = undefined;
-            var scratch_alloc: std.heap.BufferFirstAllocator = .init(&scratch_buffer, response_arena.allocator());
 
             var request: Request = .{
                 .io = self.loop.io,
-                .arena = response_arena.allocator(),
                 .cid = ctx.cid,
                 .req = req,
                 .received_dt = dt,
@@ -410,36 +404,71 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         .index = null,
                     },
                     .head_buffer = req.head_buffer,
-                    .scratch_alloc = scratch_alloc.allocator(),
+                    .scratch_alloc = .init(&scratch_buffer),
+                    .fallback_alloc = .init(self.loop.gpa),
                 },
             };
+            defer request.internal.fallback_alloc.deinit();
 
-            defer if (request.internal.ta_pool.index) |index| {
-                const ta = &self.temp_allocators.items[index];
-                const final_usage = ta.snapshot();
-                const high_water = ta.high_water_usage();
-                const committed = ta.committed();
-                const reserved = ta.reservation.len;
-                const prev_estimate = ta.usage_estimate;
-                ta.reset(.{
-                    .usage_contraction_rate = comptime_options.temp_allocator_usage_contraction_rate,
-                    .usage_expansion_rate = comptime_options.temp_allocator_usage_expansion_rate,
-                    .fast_usage_expansion_rate = comptime_options.temp_allocator_fast_usage_expansion_rate,
-                });
-                const new_committed = ta.committed();
-                const new_estimate = ta.usage_estimate;
-                self.index_pool.release(index);
-                log.debug("{f}: temp usage: final={d}  high water={d}  prev_estimate={d}  d_estimate={d}  released={d}  committed={d}  reserved={d}", .{
-                    ctx.cid,
-                    fmt.bytes(final_usage),
-                    fmt.bytes(high_water),
-                    fmt.bytes(prev_estimate),
-                    fmt.bytes_signed(@as(isize, @intCast(new_estimate)) - @as(isize, @intCast(prev_estimate))),
-                    fmt.bytes(committed - new_committed),
-                    fmt.bytes(new_committed),
-                    fmt.bytes(reserved),
-                });
-            };
+            defer {
+                const scratch_usage = request.internal.scratch_alloc.end_index;
+
+                const fallback_capacity = request.internal.fallback_alloc.queryCapacity();
+                var fallback_usage: usize = 0;
+                if (request.internal.fallback_alloc.state.used_list) |first| {
+                    var it: ?@TypeOf(first) = first;
+                    while (it) |node| : (it = node.next) {
+                        fallback_usage += node.end_index;
+                    }
+                }
+
+                if (request.internal.ta_pool.index) |index| {
+                    const ta = &self.temp_allocators.items[index];
+                    const reserved = ta.reservation.len;
+                    const high_water = ta.high_water_usage();
+                    const prev_committed = ta.committed();
+                    const prev_estimate = ta.usage_estimate;
+                    ta.reset(.{
+                        .usage_contraction_rate = comptime_options.temp_allocator_usage_contraction_rate,
+                        .usage_expansion_rate = comptime_options.temp_allocator_usage_expansion_rate,
+                        .fast_usage_expansion_rate = comptime_options.temp_allocator_fast_usage_expansion_rate,
+                    });
+                    const new_committed = ta.committed();
+                    const new_estimate = ta.usage_estimate;
+                    self.index_pool.release(index);
+                    log.debug("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d}    temp: {d} / {d}  est => {d} ({d})  commit => {d} ({d})", .{
+                        ctx.cid,
+                        fmt.bytes(scratch_usage),
+                        fmt.bytes(scratch_buffer.len),
+                        fmt.bytes(fallback_usage),
+                        fmt.bytes(fallback_capacity),
+                        fmt.bytes(high_water),
+                        fmt.bytes(reserved),
+                        fmt.bytes(new_estimate),
+                        fmt.bytes_signed(@as(isize, @intCast(new_estimate)) - @as(isize, @intCast(prev_estimate))),
+                        fmt.bytes(new_committed),
+                        fmt.bytes_signed(@as(isize, @intCast(new_committed)) - @as(isize, @intCast(prev_committed))),
+                    });
+                } else {
+                    if (fallback_usage > 0) {
+                        log.info("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d} (consider using Temp_Allocator)", .{
+                            ctx.cid,
+                            fmt.bytes(scratch_usage),
+                            fmt.bytes(scratch_buffer.len),
+                            fmt.bytes(fallback_usage),
+                            fmt.bytes(fallback_capacity),
+                        });
+                    } else {
+                        log.debug("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d}", .{
+                            ctx.cid,
+                            fmt.bytes(scratch_usage),
+                            fmt.bytes(scratch_buffer.len),
+                            fmt.bytes(fallback_usage),
+                            fmt.bytes(fallback_capacity),
+                        });
+                    }
+                }
+            }
 
             request.handle(&self.injector_context, "") catch |err| {
                 try ctx.propagate_cancel();

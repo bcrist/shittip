@@ -10,6 +10,7 @@ pub const Connection_Id = @import("Connection_Id.zig");
 pub const Index_Pool = @import("Index_Pool.zig");
 pub const routing = @import("routing.zig");
 pub const Request = @import("Request.zig");
+pub const Range = @import("Range.zig");
 
 pub const Charset = @import("charset.zig").Charset;
 pub const Content_Type = @import("content_type.zig").Content_Type;

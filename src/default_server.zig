@@ -5,7 +5,7 @@ pub fn Default_Server(comptime comptime_options: server.Comptime_Options) type {
         }
 
         pub fn inject_random(req: *Request) !std.Random {
-            const rng: *std.Random.Xoshiro256 = try req.arena.create(std.Random.Xoshiro256);
+            const rng: *std.Random.Xoshiro256 = try req.arena().create(std.Random.Xoshiro256);
             var seed: [4]u64 = undefined;
             req.io.random(std.mem.asBytes(&seed));
             rng.* = .{
@@ -14,14 +14,12 @@ pub fn Default_Server(comptime comptime_options: server.Comptime_Options) type {
             return rng.random();
         }
 
-        pub fn inject_allocator(req: *Request) !std.mem.Allocator {
-            try req.replace_arena();
-            return req.arena;
+        pub fn inject_allocator(req: *Request) std.mem.Allocator {
+            return req.arena();
         }
 
         pub fn inject_temp_allocator(req: *Request) !*Temp_Allocator {
-            try req.replace_arena();
-            return &req.internal.ta_pool.allocators[req.internal.ta_pool.index.?];
+            return try req.temp_allocator();
         }
 
         pub fn inject_loop(req: *Request) *Loop {

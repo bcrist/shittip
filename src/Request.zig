@@ -1,5 +1,4 @@
 io: std.Io,
-arena: std.mem.Allocator, // recommend replacing with a Temp_Allocator for requests that hit a valid endpoint
 cid: Connection_Id,
 req: std.http.Server.Request,
 received_dt: tempora.Date_Time,
@@ -42,6 +41,7 @@ response: struct {
     state: union (enum) {
         not_started,
         streaming: std.http.BodyWriter,
+        ranged_streaming: *std.Io.Writer,
         sent,
     },
 
@@ -57,24 +57,24 @@ response: struct {
     }
 },
 
-// Internal use; recommend not touching these:
-internal: struct {
-    loop: *Loop,
-    registry: *const std.StringHashMapUnmanaged(std.ArrayList(server.Handler_Func)),
-    body: ?*std.Io.Reader, // use .body_reader() to populate/access this
-    decompress: std.http.Decompress,
-    header_strings_cloned: bool,
-    ta_pool: struct {
-        pool: *Index_Pool,
-        allocators: []Temp_Allocator,
-        index: ?usize,
-    },
-    // same as req.head_buffer, but we copy it into the arena to avoid it going undefined when reading request body content
-    head_buffer: []const u8,
-    scratch_alloc: std.mem.Allocator,
-},
+internal: Request_Internal, // Internal use; recommend not touching this directly
 
 const Request = @This();
+
+/// Provides an Allocator which will automatically be reset when the request is complete.
+pub fn arena(self: *Request) std.mem.Allocator {
+    return self.internal.arena();
+}
+
+/// Provides a lock free thread safe Allocator which will automatically be reset when the request is complete.
+/// Using this at the same time as the interface returned by `arena()` is not thread safe.
+pub fn arena_thread_safe(self: *Request) std.mem.Allocator {
+    return self.internal.arena_thread_safe();
+}
+
+pub fn temp_allocator(self: *Request) error{InsufficientResources}!*Temp_Allocator {
+    return self.internal.temp_allocator(self.cid.connection_num);
+}
 
 pub fn handle(self: *Request, ctx: *anyopaque, root_flow: []const u8) !void {
     _ = try self.chain(root_flow);
@@ -93,7 +93,7 @@ pub fn chain(self: *Request, flow: []const u8) std.mem.Allocator.Error!bool {
             handlers.items.len,
             std.zig.fmtString(flow),
         });
-        try self.handlers.pushBackSlice(self.internal.scratch_alloc, handlers.items);
+        try self.handlers.pushBackSlice(self.arena(), handlers.items);
         return true;
     } else {
         log.debug("{f}: No handler(s) for flow '{f}'", .{
@@ -102,14 +102,6 @@ pub fn chain(self: *Request, flow: []const u8) std.mem.Allocator.Error!bool {
         });
     }
     return false;
-}
-
-pub fn replace_arena(self: *Request) error{InsufficientResources}!void {
-    if (self.internal.ta_pool.index == null) {
-        const index = try self.internal.ta_pool.pool.acquire(self.cid.connection_num);
-        self.internal.ta_pool.index = index;
-        self.arena = self.internal.ta_pool.allocators[index].allocator();
-    }
 }
 
 pub fn try_set_date(self: *Request) !void {
@@ -122,11 +114,11 @@ pub fn header_iterator(self: *Request) std.http.HeaderIterator {
     return std.http.HeaderIterator.init(self.internal.head_buffer);
 }
 
-pub fn get_header(self: *Request, name: []const u8) ?std.http.Header {
+pub fn get_header(self: *Request, name: []const u8) ?[]const u8 {
     var iter = self.header_iterator();
     while (iter.next()) |header| {
         if (std.ascii.eqlIgnoreCase(name, header.name)) {
-            return header;
+            return header.value;
         }
     }
     return null;
@@ -134,9 +126,9 @@ pub fn get_header(self: *Request, name: []const u8) ?std.http.Header {
 
 pub fn check_accept_encoding(self: *Request, desired_encoding: std.http.ContentEncoding) bool {
     if (desired_encoding == .identity) return true;
-    if (self.get_header("accept-encoding")) |header| {
+    if (self.get_header("accept-encoding")) |header_value| {
         const name = @tagName(desired_encoding);
-        var iter = std.mem.tokenizeAny(u8, header.value, ", ");
+        var iter = std.mem.tokenizeAny(u8, header_value, ", ");
         while (iter.next()) |item| {
             if (std.ascii.eqlIgnoreCase(item, name)) return true;
         }
@@ -157,15 +149,16 @@ pub fn path_remaining_iterator(self: *Request) std.mem.SplitIterator(u8, .scalar
 }
 
 pub fn get_path_param(self: *Request, name: []const u8) !?[]const u8 {
+    const allocator = self.arena_thread_safe();
     var temp: std.ArrayList(u8) = .empty;
     var iter = self.path_iterator();
     while (iter.next()) |part| {
         if (std.mem.indexOfScalar(u8, part, ':')) |end| {
             temp.clearRetainingCapacity();
-            const prefix = try percent_encoding.decode_maybe_append(self.internal.scratch_alloc, &temp, part[0 .. end], .{});
+            const prefix = try percent_encoding.decode_maybe_append(allocator, &temp, part[0 .. end], .{});
             if (std.mem.eql(u8, name, prefix)) {
                 temp.clearRetainingCapacity();
-                return try percent_encoding.decode_maybe_append(self.internal.scratch_alloc, &temp, part[end + 1 ..], .{});
+                return try percent_encoding.decode_maybe_append(allocator, &temp, part[end + 1 ..], .{});
             }
         }
     }
@@ -173,7 +166,7 @@ pub fn get_path_param(self: *Request, name: []const u8) !?[]const u8 {
 }
 
 pub fn query_iterator(self: *Request) Query_Iterator {
-    return Query_Iterator.init(self.internal.scratch_alloc, self.target.query);
+    return Query_Iterator.init(self.arena_thread_safe(), self.target.query);
 }
 
 pub fn get_query_param(self: *Request, name: []const u8) !?[]const u8 {
@@ -208,11 +201,13 @@ pub fn body_reader(self: *Request) !*std.Io.Reader {
 
         try self.clone_header_strings();
 
+        const allocator = self.arena();
+
         switch (self.req.head.transfer_compression) {
             .compress => return error.UnsupportedMediaType,
             .zstd => {
-                const transfer_buffer = try self.arena.alloc(u8, 4096);
-                const decompress_buffer = try self.arena.alloc(u8, std.compress.zstd.block_size_max + std.compress.zstd.default_window_len);
+                const transfer_buffer = try allocator.alloc(u8, 4096);
+                const decompress_buffer = try allocator.alloc(u8, std.compress.zstd.block_size_max + std.compress.zstd.default_window_len);
                 self.internal.body = self.req.server.reader.bodyReaderDecompressing(
                     transfer_buffer,
                     self.req.head.transfer_encoding,
@@ -223,8 +218,8 @@ pub fn body_reader(self: *Request) !*std.Io.Reader {
                 );
             },
             .gzip, .deflate => {
-                const transfer_buffer = try self.arena.alloc(u8, 4096);
-                const decompress_buffer = try self.arena.alloc(u8, std.compress.flate.max_window_len);
+                const transfer_buffer = try allocator.alloc(u8, 4096);
+                const decompress_buffer = try allocator.alloc(u8, std.compress.flate.max_window_len);
                 self.internal.body = self.req.server.reader.bodyReaderDecompressing(
                     transfer_buffer,
                     self.req.head.transfer_encoding,
@@ -235,7 +230,7 @@ pub fn body_reader(self: *Request) !*std.Io.Reader {
                 );
             },
             .identity => {
-                const transfer_buffer = try self.arena.alloc(u8, 4096);
+                const transfer_buffer = try allocator.alloc(u8, 4096);
                 self.internal.body = self.req.server.reader.bodyReader(
                     transfer_buffer,
                     self.req.head.transfer_encoding,
@@ -255,18 +250,20 @@ pub fn body_reader(self: *Request) !*std.Io.Reader {
 pub fn clone_header_strings(self: *Request) !void {
     if (self.internal.header_strings_cloned) return;
 
-    self.internal.head_buffer = try self.arena.dupe(u8, self.internal.head_buffer);
+    const allocator = self.arena();
+
+    self.internal.head_buffer = try allocator.dupe(u8, self.internal.head_buffer);
     self.req.head_buffer = self.internal.head_buffer;
 
-    const path_remaining = try self.arena.dupe(u8, self.target.path_remaining);
-    self.target = .parse(try self.arena.dupe(u8, self.target.full));
+    const path_remaining = try allocator.dupe(u8, self.target.path_remaining);
+    self.target = .parse(try allocator.dupe(u8, self.target.full));
     self.target.path_remaining = path_remaining;
 
     self.req.head.target = self.target.full;
 
     if (self.get_header("content-type")) |ct| {
-        self.req.head.content_type = ct.value;
-        self.content_type = .parse(ct.value);
+        self.req.head.content_type = ct;
+        self.content_type = .parse(ct);
     }
 
     self.internal.header_strings_cloned = true;
@@ -278,27 +275,32 @@ fn restore_std_req_strings(self: *Request) void {
     self.req.head_buffer = self.internal.head_buffer;
     self.req.head.target = self.target.full;
     if (self.get_header("content-type")) |ct| {
-        self.req.head.content_type = ct.value;
+        self.req.head.content_type = ct;
     }
 }
 
 pub fn form_iterator(self: *Request) !Query_Reader {
-    return try Query_Reader.init(self.internal.scratch_alloc, try self.body_reader());
+    return try Query_Reader.init(self.arena_thread_safe(), try self.body_reader());
 }
 
 pub fn ensure_response_not_started(self: *Request) !void {
     if (self.response.state != .not_started) return error.ResponseAlreadyStarted;
 }
 
-pub fn add_response_header(self: *Request, name: []const u8, value: []const u8) !void {
+const Header_Error = error {
+    ResponseAlreadyStarted,
+    OutOfMemory,
+};
+
+pub fn add_response_header(self: *Request, name: []const u8, value: []const u8) Header_Error!void {
     try self.ensure_response_not_started();
-    try self.response.headers.append(self.internal.scratch_alloc, .{
+    try self.response.headers.append(self.arena(), .{
         .name = name,
         .value = value,
     });
 }
 
-pub fn maybe_add_response_header(self: *Request, name: []const u8, value: []const u8) !bool {
+pub fn maybe_add_response_header(self: *Request, name: []const u8, value: []const u8) Header_Error!bool {
     try self.ensure_response_not_started();
 
     for (self.response.headers.items) |*header| {
@@ -307,14 +309,14 @@ pub fn maybe_add_response_header(self: *Request, name: []const u8, value: []cons
         }
     }
     
-    try self.response.headers.append(self.internal.scratch_alloc, .{
+    try self.response.headers.append(self.arena(), .{
         .name = name,
         .value = value,
     });
     return true;
 }
 
-pub fn set_response_header(self: *Request, name: []const u8, value: []const u8) !void {
+pub fn set_response_header(self: *Request, name: []const u8, value: []const u8) Header_Error!void {
     try self.ensure_response_not_started();
 
     for (self.response.headers.items) |*header| {
@@ -324,7 +326,7 @@ pub fn set_response_header(self: *Request, name: []const u8, value: []const u8) 
         }
     }
 
-    try self.response.headers.append(self.internal.scratch_alloc, .{
+    try self.response.headers.append(self.arena(), .{
         .name = name,
         .value = value,
     });
@@ -347,7 +349,7 @@ pub const Common_Response_Headers = struct {
     etag: ?[]const u8 = null,
     last_modified_utc: ?tempora.Date_Time = null,
 };
-pub fn maybe_add_common_response_headers_comptime(self: *Request, comptime headers: Common_Response_Headers) !void {
+pub fn maybe_add_common_response_headers_comptime(self: *Request, comptime headers: Common_Response_Headers) Header_Error!void {
     const DTO = tempora.Date_Time.With_Offset;
 
     if (headers.date_utc) |dt| {
@@ -372,12 +374,14 @@ pub fn maybe_add_common_response_headers_comptime(self: *Request, comptime heade
     }
 }
 
-pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Response_Headers) !void {
+pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Response_Headers) Header_Error!void {
     try self.ensure_response_not_started();
+
+    const allocator = self.arena();
 
     if (headers.date_utc) |dt| {
         if (self.get_response_header("date") == null) {
-            try self.response.headers.append(self.internal.scratch_alloc, .{
+            try self.response.headers.append(allocator, .{
                 .name = "date",
                 .value = try self.fmt_http_date(dt),
             });
@@ -385,7 +389,7 @@ pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Respons
     }
     if (headers.content_type) |ct| {
         if (self.get_response_header("content-type") == null) {
-            try self.response.headers.append(self.internal.scratch_alloc, .{
+            try self.response.headers.append(allocator, .{
                 .name = "content-type",
                 .value = try self.fmt("{f}", .{ ct }),
             });
@@ -393,7 +397,7 @@ pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Respons
     }
     if (headers.content_disposition) |cd| {
         if (self.get_response_header("content-disposition") == null) {
-            try self.response.headers.append(self.internal.scratch_alloc, .{
+            try self.response.headers.append(allocator, .{
                 .name = "content-disposition",
                 .value = try self.fmt("{f}", .{ cd }),
             });
@@ -404,7 +408,7 @@ pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Respons
     }
     if (headers.etag) |etag| {
         if (self.get_response_header("etag") == null) {
-            try self.response.headers.append(self.internal.scratch_alloc, .{
+            try self.response.headers.append(allocator, .{
                 .name = "etag",
                 .value = try self.fmt("\"{s}\"", .{ etag }),
             });
@@ -412,7 +416,7 @@ pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Respons
     }
     if (headers.last_modified_utc) |dt| {
         if (self.get_response_header("last-modified") == null) {
-            try self.response.headers.append(self.internal.scratch_alloc, .{
+            try self.response.headers.append(allocator, .{
                 .name = "last-modified",
                 .value = try self.fmt_http_date(dt),
             });
@@ -425,7 +429,7 @@ pub fn maybe_add_common_response_headers_and_check_not_modified(self: *Request, 
     try self.check_not_modified(headers.last_modified_utc, headers.etag);
 }
 
-pub fn check_not_modified(self: *Request, maybe_last_modified_utc: ?tempora.Date_Time, maybe_etag: ?[]const u8) !void {
+pub fn check_not_modified(self: *Request, maybe_last_modified_utc: ?tempora.Date_Time, maybe_etag: ?[]const u8) error{NotModified}!void {
     const DTO = tempora.Date_Time.With_Offset;
 
     if (maybe_last_modified_utc == null and maybe_etag == null) return;
@@ -445,7 +449,7 @@ pub fn check_not_modified(self: *Request, maybe_last_modified_utc: ?tempora.Date
         if (maybe_etag) |etag| {
             if (std.ascii.eqlIgnoreCase(header.name, "if-none-match")) {
                 var inm_iter: ETag_Iterator = .{ .remaining = header.value };
-                not_modified_by_etag = while (try inm_iter.next()) |entry| {
+                not_modified_by_etag = while (inm_iter.next() catch return) |entry| {
                     if (std.mem.eql(u8, entry.value, etag)) {
                         break true;
                     }
@@ -461,23 +465,41 @@ pub fn check_not_modified(self: *Request, maybe_last_modified_utc: ?tempora.Date
     }
 }
 
-pub fn check_and_add_last_modified(self: *Request, last_modified_utc: tempora.Date_Time) !void {
-    try self.add_response_header("last-modified", try self.fmt_http_date(last_modified_utc));
-    if (self.get_header("if-modified-since")) |header| {
-        const DTO = tempora.Date_Time.With_Offset;
-        if (DTO.from_string(DTO.http, header.value)) |last_seen| {
-            std.debug.assert(last_seen.utc_offset_ms == 0);
-            if (!last_seen.dt.is_before(last_modified_utc)) {
-                return error.NotModified;
+const Range_Error = error {
+    BadRequest,
+} || Header_Error;
+
+pub fn range(self: *Request, unit: []const u8, ignore_bad_range: bool) Range_Error!?Range.Iterator {
+    _ = try self.maybe_add_response_header("accept-ranges", unit);
+    if (self.get_header("range")) |range_header| {
+        const iter = Range.Iterator.init(range_header) catch |err| switch (err) {
+            error.BadRange => {
+                return if (ignore_bad_range) null else error.BadRequest;
+            },
+        };
+        if (!std.mem.eql(u8, iter.unit, unit)) return null;
+
+        if (self.get_header("if-range")) |if_range| {
+            if (self.get_response_header("etag")) |etag| {
+                if (std.mem.eql(u8, if_range, etag)) return iter;
             }
-        } else |_| {
-            log.debug("Could not parse if-modified-since date: {s}", .{ header.value });
+            const DTO = tempora.Date_Time.With_Offset;
+            const if_range_last_modified = DTO.from_string(DTO.http, if_range) catch return null;
+            if (self.get_response_header("last-modified")) |response_last_modified| {
+                const last_modified = DTO.from_string(DTO.http, response_last_modified) catch return null;
+                if (std.meta.eql(if_range_last_modified, last_modified)) return iter;
+            }
+            
+            return null;
         }
+
+        return iter;
     }
+    return null;
 }
 
 pub fn hx_current_url(self: *Request) ?[]const u8 {
-    return if (self.get_header("hx-current-url")) |param| param.value else null;
+    return if (self.get_header("hx-current-url")) |url| url else null;
 }
 
 pub fn hx_current_query(self: *Request) []const u8 {
@@ -508,7 +530,7 @@ pub fn response_writer(self: *Request) !*std.Io.Writer {
                 self.req.head.target,
             });
 
-            const buf = try self.arena.alloc(u8, self.response.buffer_bytes);
+            const buf = try self.arena().alloc(u8, self.response.buffer_bytes);
 
             const should_clone_strings = try self.maybe_clone_strings_before_response();
             self.response.state = .{
@@ -522,15 +544,101 @@ pub fn response_writer(self: *Request) !*std.Io.Writer {
             return &self.response.state.streaming.writer;
         },
         .streaming => |*writer| return &writer.writer,
+        .ranged_streaming => |writer| return writer,
         .sent => return error.ResponseAlreadySent,
     }
 }
 
+const Multipart_Options = struct {
+    ignore_bad_range: bool = true, // send full content with 200 instead of 400 if the range header is invalid
+    ignore_range_not_satisfiable: bool = true, // send full content with 200 instead of 416 if no satisfiable ranges are found
+    boundary: []const u8 = "KAdQK0kyGAQzGAgaIjELGEc8GzQ1Y1o1JVpYG1wuXBI3TiA2NwFCMiZjHRMpJzMDXlhfQzU9Khs9TTM6EVZZXSkTNipcHVtEPVQWD00NFFkQFVpUY049FA0ZK0EeWgI8",
+};
+pub fn response_writer_ranged(self: *Request, content_length: usize, options: Multipart_Options) !*std.Io.Writer {
+    switch (self.response.state) {
+        .not_started => {
+            const writer = try self.response_writer();
+            if (try self.range("bytes", options.ignore_bad_range)) |iterator| {
+                return try self.make_response_writer_ranged(content_length, self.response.state.streaming, iterator, options);
+            }
+            return writer;
+        },
+        .streaming => |*writer| {
+            if (try self.range("bytes", options.ignore_bad_range)) |iterator| {
+                return try self.make_response_writer_ranged(content_length, writer.*, iterator, options);
+            }
+            return &writer.writer;
+        },
+        .ranged_streaming => |writer| return writer,
+        .sent => return error.ResponseAlreadySent,
+    }
+}
+
+fn make_response_writer_ranged(self: *Request, content_length: usize, body_writer: std.http.BodyWriter, iterator: Range.Iterator, options: Multipart_Options) !*std.Io.Writer {
+    if (self.response.status != .ok) return try self.response_writer();
+
+    const allocator = self.arena();
+
+    if (iterator.coalesce(allocator, content_length, 50)) |ranges| {
+        if (ranges.len == 0) {
+            if (!options.ignore_range_not_satisfiable) {
+                try self.set_response_header("content-range", try self.fmt("bytes */{d}", .{ content_length }));
+                return error.RangeNotSatisfiable;
+            }
+        } else {
+            self.response.status = .partial_content;
+            self.response.content_length = null;
+            var content_type: []const u8 = "";
+
+            const buf = allocator.alloc(u8, self.response.buffer_bytes) catch {
+                return try self.response_writer();
+            };
+            errdefer allocator.free(buf);
+
+            const bw = allocator.create(std.http.BodyWriter) catch {
+                return try self.response_writer();
+            };
+            errdefer allocator.destroy(bw);
+
+            const rw = allocator.create(Range.Writer) catch {
+                return try self.response_writer();
+            };
+            errdefer allocator.destroy(rw);
+
+            if (ranges.len == 1) {
+                try ranges[0].set_header(content_length, self);
+            } else {
+                content_type = self.get_response_header("content-type") orelse "";
+                try self.set_response_header("content-type", try self.fmt("multipart/byteranges; boundary={s}", .{ options.boundary }));
+            }
+
+            bw.* = body_writer;
+            rw.* = Range.Writer.init(&bw.writer, content_length, ranges, options.boundary, content_type, buf);
+
+            return &rw.interface;
+        }            
+    } else |err| switch (err) {
+        error.OutOfMemory => {},
+        error.BadRange => {
+            if (!options.ignore_bad_range) return error.BadRequest;
+        },
+    }
+
+    return try self.response_writer();
+}
+
 pub fn end_response(self: *Request) !void {
     switch (self.response.state) {
-        .not_started => return error.NotFound,
+        .not_started => return error.ResponseNotStarted,
         .streaming => |*bw| {
             try bw.end();
+            self.response.state = .sent;
+        },
+        .ranged_streaming => |w| {
+            const range_writer: *Range.Writer = @alignCast(@fieldParentPtr("interface", w));
+            try range_writer.finish();
+            const body_writer: *std.http.BodyWriter = @alignCast(@fieldParentPtr("writer", range_writer.out));
+            try body_writer.end();
             self.response.state = .sent;
         },
         .sent => {},
@@ -555,7 +663,47 @@ pub fn respond(self: *Request, content: []const u8) !void {
     if (should_clone_strings) self.restore_std_req_strings();
 }
 
+pub fn respond_ranged(self: *Request, content: []const u8, options: Multipart_Options) !void {
+    if (self.response.status != .ok) {
+        return try self.respond(content);
+    }
+
+    if (try self.range("bytes", options.ignore_bad_range)) |iterator| {
+        if (iterator.coalesce(self.arena(), content.len, 50)) |ranges| {
+            if (ranges.len == 0) {
+                if (!options.ignore_range_not_satisfiable) {
+                    try self.set_response_header("content-range", try self.fmt("bytes */{d}", .{ content.len }));
+                    return error.RangeNotSatisfiable;
+                }
+            } else if (ranges.len == 1) {
+                self.response.status = .partial_content;
+                try ranges[0].set_header(content.len, self);
+                try self.respond(ranges[0].slice(content));
+                return;
+            } else {
+                const content_type = self.get_response_header("content-type") orelse "";
+                try self.set_response_header("content-type", try self.fmt("multipart/byteranges; boundary={s}", .{ options.boundary }));
+                self.response.status = .partial_content;
+                self.response.content_length = null;
+                const writer = try self.response_writer();
+                for (ranges) |r| {
+                    try r.write_body_part(content.len, options.boundary, content_type, writer);
+                }
+                try Range.write_terminal_boundary(options.boundary, writer);
+            }
+        } else |err| switch (err) {
+            error.OutOfMemory => {},
+            error.BadRange => {
+                if (!options.ignore_bad_range) return error.BadRequest;
+            },
+        }
+    }
+
+    try self.respond(content);
+}
+
 const Respond_Err_Options = struct {
+    context_vec: []const []const u8 = &.{},
     empty_content: bool = false,
     status: std.http.Status = .internal_server_error,
     err: ?anyerror = null,
@@ -623,7 +771,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
 pub fn format_err_response(self: *Request, options: Respond_Err_Options) ![]const u8 {
     if (options.empty_content) return "";
 
-    var content: std.Io.Writer.Allocating = .init(self.internal.scratch_alloc);
+    var content: std.Io.Writer.Allocating = .init(self.arena());
     const w = &content.writer;
 
     try w.print(
@@ -639,6 +787,14 @@ pub fn format_err_response(self: *Request, options: Respond_Err_Options) ![]cons
             @intFromEnum(options.status),
             options.status.phrase() orelse "",
         });
+
+    if (options.context_vec.len > 0) {
+        try w.writeAll("<pre>\n");
+        for (options.context_vec) |context| {
+            try w.writeAll(context);
+        }
+        try w.writeAll("</pre>\n");
+    }
 
     if (options.err) |err| {
         try w.print("<h3>{s}</h3>\n", .{ @errorName(err) });
@@ -713,11 +869,11 @@ pub fn render(self: *Request, comptime template_path: []const u8, data: anytype,
 }
 
 pub fn fmt(self: *Request, comptime pattern: []const u8, args: anytype) std.mem.Allocator.Error![]u8 {
-    return std.fmt.allocPrint(self.internal.scratch_alloc, pattern, args);
+    return std.fmt.allocPrint(self.arena_thread_safe(), pattern, args);
 }
 
 pub fn fmt_http_date(self: *Request, dt: tempora.Date_Time) std.mem.Allocator.Error![]u8 {
-    return std.fmt.allocPrint(self.internal.scratch_alloc, "{f}", .{ dt.with_offset(0).fmt(tempora.Date_Time.With_Offset.http) });
+    return std.fmt.allocPrint(self.arena_thread_safe(), "{f}", .{ dt.with_offset(0).fmt(tempora.Date_Time.With_Offset.http) });
 }
 
 const log = std.log.scoped(.http);
@@ -728,9 +884,8 @@ const Connection_Id = @import("Connection_Id.zig");
 const Content_Type = @import("content_type.zig").Content_Type;
 const Content_Disposition = @import("content_disposition.zig").Content_Disposition;
 const ETag_Iterator = @import("ETag_Iterator.zig");
-const Loop = @import("Loop.zig");
-const Index_Pool = @import("Index_Pool.zig");
-const routing = @import("routing.zig");
+const Range = @import("Range.zig");
+const Request_Internal = @import("Request_Internal.zig");
 const server = @import("server.zig");
 const Temp_Allocator = @import("Temp_Allocator");
 const percent_encoding = @import("percent_encoding");

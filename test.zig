@@ -75,5 +75,9 @@ test "server lifecycle" {
     try server_future.await(std.testing.io);
 }
 
+comptime {
+    _ = @import("ci_test.zig");
+}
+
 const http = @import("http");
 const std = @import("std");

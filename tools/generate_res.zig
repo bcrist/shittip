@@ -198,6 +198,9 @@ pub fn main(init: std.process.Init) !void {
         var temp_writer = std.Io.Writer.Allocating.fromArrayList(init.gpa, &temp);
         const tw = &temp_writer.writer;
 
+        var uncompressed_lengths_writer: std.Io.Writer.Allocating = .init(init.gpa);
+        defer uncompressed_lengths_writer.deinit();
+
         while (try walker.next(init.io)) |entry| {
             if (entry.kind != .file) continue;
 
@@ -214,6 +217,13 @@ pub fn main(init: std.process.Init) !void {
             const unix_path = unix_path_writer.buffered();
             std.mem.replaceScalar(u8, unix_path, '\\', '/');
             r.toss(1); // \n
+
+            const uncompressed_length_str = try r.takeDelimiter('\n') orelse return error.ExpectedUncompressedLength;
+            const uncompressed_length = try std.fmt.parseUnsigned(usize, uncompressed_length_str, 10);
+            try uncompressed_lengths_writer.writer.print("    pub const {f} = {};\n", .{
+                std.zig.fmtId(unix_path),
+                uncompressed_length,
+            });
 
             var compressed_file_path_buf: [256]u8 = undefined;
             var compressed_file_path_writer = std.Io.Writer.fixed(&compressed_file_path_buf);
@@ -254,6 +264,13 @@ pub fn main(init: std.process.Init) !void {
             \\
         );
         try out.writeAll(temp_writer.written());
+        try out.writeAll(
+            \\};
+            \\
+            \\pub const uncompressed_length = struct {
+            \\
+        );
+        try out.writeAll(uncompressed_lengths_writer.written());
         try out.writeAll("};\n");
 
         temp = temp_writer.toArrayList();

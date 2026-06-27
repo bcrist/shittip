@@ -18,3 +18,9 @@ jobs:
           mirror: 'https://zig.bcr.ist/'
       - run: zig build -Dtarget=x86_64-windows
       - run: zig build install citest
+      - name: 'Demo (linux)'
+        run: zig build
+        working-directory: ./demo/
+      - name: 'Demo (windows)'
+        run: zig build -Dtarget=x86_64-windows
+        working-directory: ./demo/
