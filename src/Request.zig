@@ -562,7 +562,7 @@ pub fn response_writer_ranged(self: *Request, content_length: usize, options: Mu
             }
             return try self.response_writer();
         },
-        .streaming => return error.ResponseAlreadyStarted,
+        .streaming => |*writer| return &writer.writer,
         .ranged_streaming => |writer| return writer,
         .sent => return error.ResponseAlreadySent,
     }
