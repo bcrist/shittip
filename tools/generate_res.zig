@@ -156,7 +156,7 @@ pub fn main(init: std.process.Init) !void {
                     i += 1;
                     try tw.writeByte(' ');
                 }
-                try tw.print("0x{X},", .{ @as(u32, @bitCast(word)) });
+                try tw.print("0x{X},", .{ word.offset });
             }
 
             try tw.writeAll("\n        });\n");
