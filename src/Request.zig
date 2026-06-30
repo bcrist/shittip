@@ -571,7 +571,7 @@ pub fn response_writer_ranged(self: *Request, content_length: usize, options: Mu
 fn make_response_writer_ranged(self: *Request, content_length: usize, iterator: Range.Iterator, options: Multipart_Options) !*std.Io.Writer {
     if (self.response.status != .ok) return try self.response_writer();
     
-    std.debug.assert(self.response.state == .streaming);
+    std.debug.assert(self.response.state == .not_started);
 
     const allocator = self.arena();
 
