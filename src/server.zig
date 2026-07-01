@@ -528,7 +528,9 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     ctx.writer.write_file_err = null;
                     ctx.writer.err = null;
 
-                    if (actual_err != error.ConnectionResetByPeer) {
+                    if (actual_err == error.ConnectionResetByPeer) {
+                        log.debug("{f}: {t}", .{ ctx.cid, err });
+                    } else {
                         request.maybe_respond_err(.{
                             .status = switch (actual_err) {
                                 error.Canceled, error.InsufficientResources, error.OutOfMemory => .service_unavailable,
@@ -592,7 +594,7 @@ const Handler_Context = struct {
     server: *std.http.Server,
 
     pub fn log_error(ctx: Handler_Context, comptime msg: []const u8, err: anyerror, maybe_trace: ?*std.builtin.StackTrace) void {
-        log.warn("{f}: " ++ msg ++ ": {}", .{ ctx.cid, err });
+        log.warn("{f}: " ++ msg ++ ": {t}", .{ ctx.cid, err });
 
         if (maybe_trace) |trace| {
             std.debug.dumpErrorReturnTrace(trace);
@@ -605,31 +607,31 @@ const Handler_Context = struct {
         if (ctx.reader.err) |rerr| switch (rerr) {
             error.Canceled => {},
             error.ConnectionResetByPeer => {
-                log.debug("{f}: Failed to read request: {}", .{ ctx.cid, rerr });
+                log.debug("{f}: Failed to read request: {t}", .{ ctx.cid, rerr });
             },
             else => {
-                log.warn("{f}: Failed to read request: {}", .{ ctx.cid, rerr });
+                log.warn("{f}: Failed to read request: {t}", .{ ctx.cid, rerr });
             },
         };
 
         if (ctx.server.reader.body_err) |rerr| {
-            log.warn("{f}: Failed to read request body: {}", .{ ctx.cid, rerr });
+            log.warn("{f}: Failed to read request body: {t}", .{ ctx.cid, rerr });
         }
 
         if (ctx.writer.err) |werr| switch (werr) {
             error.Canceled => {},
             error.ConnectionResetByPeer => {
-                log.debug("{f}: Failed to write response: {}", .{ ctx.cid, werr });
+                log.debug("{f}: Failed to write response: {t}", .{ ctx.cid, werr });
             },
             else => {
-                log.warn("{f}: Failed to write response: {}", .{ ctx.cid, werr });
+                log.warn("{f}: Failed to write response: {t}", .{ ctx.cid, werr });
             },
         };
 
         if (ctx.writer.write_file_err) |werr| switch (werr) {
             error.Canceled => {},
             else => {
-                log.warn("{f}: Failed to write response: {}", .{ ctx.cid, werr });
+                log.warn("{f}: Failed to write response: {t}", .{ ctx.cid, werr });
             },
         };
     }
