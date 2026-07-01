@@ -528,21 +528,22 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     ctx.writer.write_file_err = null;
                     ctx.writer.err = null;
 
-                    request.maybe_respond_err(.{
-                        .status = switch (actual_err) {
-                            error.Canceled, error.InsufficientResources, error.OutOfMemory => .service_unavailable,
-                            else => .internal_server_error,
-                        },
-                        .err = actual_err,
-                        .trace = @errorReturnTrace(),
-                    }) catch |response_err| {
-                        ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
-                        ctx.server.reader.state = .closing;
-                        if (response_err == error.Canceled) return error.Canceled;
-                        return;
-                    };
+                    if (actual_err != error.ConnectionResetByPeer) {
+                        request.maybe_respond_err(.{
+                            .status = switch (actual_err) {
+                                error.Canceled, error.InsufficientResources, error.OutOfMemory => .service_unavailable,
+                                else => .internal_server_error,
+                            },
+                            .err = actual_err,
+                            .trace = @errorReturnTrace(),
+                        }) catch |response_err| {
+                            ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
+                            ctx.server.reader.state = .closing;
+                            if (response_err == error.Canceled) return error.Canceled;
+                            return;
+                        };
+                    }
                     ctx.server.reader.state = .closing;
-                    if (err == error.Canceled) return error.Canceled;
                 }
             };
 
