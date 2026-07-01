@@ -711,7 +711,7 @@ const Respond_Err_Options = struct {
 pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
     if (self.response.state != .not_started) {
         if (options.err) |err| {
-            log.err("{f}: [{} {} after response started] {t} {s}", .{
+            log.err("{f}: [{} {t} after response started] {t} {s}", .{
                 self.cid,
                 @intFromEnum(options.status),
                 err,
@@ -733,7 +733,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
     }
 
     if (options.err) |e| {
-        log.warn("{f}: [{} {}] {t} {s}", .{
+        log.warn("{f}: [{} {t}] {t} {s}", .{
             self.cid,
             @intFromEnum(options.status),
             e,
@@ -821,7 +821,7 @@ pub fn format_err_response(self: *Request, options: Respond_Err_Options) ![]cons
 pub fn maybe_respond_err(self: *Request, options: Respond_Err_Options) !void {
     if (self.response.state != .not_started) {
         if (options.err) |err| {
-            log.err("{f}: [{} {} after response started; suppressed] {t} {s}", .{
+            log.err("{f}: [{} {t} after response started; suppressed] {t} {s}", .{
                 self.cid,
                 @intFromEnum(options.status),
                 err,

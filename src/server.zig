@@ -6,6 +6,8 @@ pub const Comptime_Options = struct {
     temp_allocator_usage_contraction_rate: u16 = 16,
     temp_allocator_usage_expansion_rate: u16 = 32,
     temp_allocator_fast_usage_expansion_rate: u16 = 128,
+    timing_log_info_threshold: std.Io.Duration = .fromMilliseconds(2),
+    timing_log_warn_threshold: std.Io.Duration = .fromMilliseconds(20),
 
     // When using std.Io.Threaded, thread stack size must be greater than connection_read_buffer_bytes + connection_write_buffer_bytes + request_scratch_buffer_bytes
 };
@@ -369,7 +371,8 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
         }
 
         fn process_request_inner(self: *Self, ctx: Handler_Context, req: std.http.Server.Request) std.Io.Cancelable!void {
-            const dt = tempora.now(self.loop.io, &tempora.Timezone.utc).dt;
+            const begin_ts: std.Io.Timestamp = .now(self.loop.io, .real);
+            const dt = tempora.Date_Time.With_Offset.from_timestamp(begin_ts, &tempora.Timezone.utc).dt;
 
             var scratch_buffer: [comptime_options.request_scratch_buffer_bytes]u8 align(16) = undefined;
 
@@ -411,6 +414,16 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             defer request.internal.fallback_alloc.deinit();
 
             defer {
+                const end_ts: std.Io.Timestamp = .now(self.loop.io, .real);
+                const duration = begin_ts.durationTo(end_ts);
+                if (duration.nanoseconds >= comptime_options.timing_log_warn_threshold.nanoseconds) {
+                    log_timing.warn("{f}: Took {f}", .{ ctx.cid, duration });
+                } else if (duration.nanoseconds >= comptime_options.timing_log_info_threshold.nanoseconds) {
+                    log_timing.info("{f}: Took {f}", .{ ctx.cid, duration });
+                } else {
+                    log_timing.debug("{f}: Took {f}", .{ ctx.cid, duration });
+                }
+
                 const scratch_usage = request.internal.scratch_alloc.end_index;
 
                 const fallback_capacity = request.internal.fallback_alloc.queryCapacity();
@@ -436,7 +449,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     const new_committed = ta.committed();
                     const new_estimate = ta.usage_estimate;
                     self.index_pool.release(index);
-                    log.debug("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d}    temp: {d} / {d}  est => {d} ({d})  commit => {d} ({d})", .{
+                    log_mem.info("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d}    temp: {d} / {d}  est => {d} ({d})  commit => {d} ({d})", .{
                         ctx.cid,
                         fmt.bytes(scratch_usage),
                         fmt.bytes(scratch_buffer.len),
@@ -451,7 +464,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     });
                 } else {
                     if (fallback_usage > 0) {
-                        log.info("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d} (consider using Temp_Allocator)", .{
+                        log_mem.warn("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d} (consider using Temp_Allocator)", .{
                             ctx.cid,
                             fmt.bytes(scratch_usage),
                             fmt.bytes(scratch_buffer.len),
@@ -459,7 +472,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                             fmt.bytes(fallback_capacity),
                         });
                     } else {
-                        log.debug("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d}", .{
+                        log_mem.info("{f}: allocations: scratch: {d} / {d}    fallback: {d} / {d}", .{
                             ctx.cid,
                             fmt.bytes(scratch_usage),
                             fmt.bytes(scratch_buffer.len),
@@ -471,6 +484,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             }
 
             request.handle(&self.injector_context, "") catch |err| {
+                if (err == error.Canceled) return error.Canceled;
                 try ctx.propagate_cancel();
 
                 if (status_from_error(err)) |status| {
@@ -483,21 +497,50 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         ctx.server.reader.state = .closing;
                     };
                 } else if (err != error.Done) {
+                    const actual_err = switch (err) {
+                        error.ReadFailed => e: {
+                            if (ctx.server.reader.body_err) |rerr| {
+                                ctx.server.reader.body_err = null;
+                                break :e rerr;
+                            } else if (ctx.reader.err) |rerr| {
+                                ctx.reader.err = null;
+                                break :e rerr;
+                            } else {
+                                break :e err;
+                            }
+                        },
+                        error.WriteFailed => e: {
+                            if (ctx.writer.write_file_err) |werr| {
+                                ctx.writer.write_file_err = null;
+                                break :e werr;
+                            } else if (ctx.writer.err) |werr| {
+                                ctx.writer.err = null;
+                                break :e werr;
+                            } else {
+                                break :e err;
+                            }
+                        },
+                        else => err,
+                    };
+                    ctx.log_extra_errors();
+                    ctx.server.reader.body_err = null;
+                    ctx.reader.err = null;
+                    ctx.writer.write_file_err = null;
+                    ctx.writer.err = null;
+
                     request.maybe_respond_err(.{
-                        .status = switch (err) {
+                        .status = switch (actual_err) {
                             error.Canceled, error.InsufficientResources, error.OutOfMemory => .service_unavailable,
                             else => .internal_server_error,
                         },
-                        .err = err,
+                        .err = actual_err,
                         .trace = @errorReturnTrace(),
                     }) catch |response_err| {
                         ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
                         ctx.server.reader.state = .closing;
-                        if (err == error.Canceled) return error.Canceled;
                         if (response_err == error.Canceled) return error.Canceled;
                         return;
                     };
-                    ctx.log_extra_errors();
                     ctx.server.reader.state = .closing;
                     if (err == error.Canceled) return error.Canceled;
                 }
@@ -601,6 +644,8 @@ const Handler_Context = struct {
 pub const Handler_Func = *const fn (*Request, *anyopaque) anyerror!void;
 
 const log = std.log.scoped(.http);
+const log_mem = std.log.scoped(.http_mem);
+const log_timing = std.log.scoped(.http_timing);
 
 const routing = @import("routing.zig");
 const Request = @import("Request.zig");
