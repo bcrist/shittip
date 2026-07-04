@@ -9,6 +9,7 @@ pub const Server_Tasks = @import("Server_Tasks.zig");
 pub const Connection_Id = @import("Connection_Id.zig");
 pub const Index_Pool = @import("Index_Pool.zig");
 pub const routing = @import("routing.zig");
+pub const Static_Updatable = @import("Static_Updatable.zig");
 pub const Request = @import("Request.zig");
 pub const Range = @import("Range.zig");
 

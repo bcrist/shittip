@@ -1,5 +1,5 @@
 loop: *Loop,
-registry: *const std.StringHashMapUnmanaged(std.ArrayList(server.Handler_Func)),
+registry: *const std.StringHashMapUnmanaged(std.ArrayList(server.Handler)),
 body: ?*std.Io.Reader, // use .body_reader() to populate/access this
 decompress: std.http.Decompress,
 header_strings_cloned: bool,
@@ -12,6 +12,7 @@ ta_pool: struct {
 head_buffer: []const u8,
 scratch_alloc: std.heap.FixedBufferAllocator,
 fallback_alloc: std.heap.ArenaAllocator,
+handler_data: ?*anyopaque,
 
 pub fn temp_allocator(self: *Request_Internal, entropy: usize) error{InsufficientResources}!*Temp_Allocator {
     const index = self.ta_pool.index orelse i: {

@@ -42,7 +42,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
     };
     return struct {
         loop: *Loop,
-        registry: std.StringHashMapUnmanaged(std.ArrayList(Handler_Func)),
+        registry: std.StringHashMapUnmanaged(std.ArrayList(Handler)),
         tasks: Server_Tasks,
         injector_context: Injector_Context,
         server_num: ?usize,
@@ -100,7 +100,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             self.registry.deinit(self.loop.gpa);
         }
 
-        /// `flow` must remain valid for the lifetime of the server (as well as `handler_func`, obviously)
+        /// `flow` must remain valid for the lifetime of the server
         pub fn register(self: *Self, flow: []const u8, comptime handler_func: anytype) !void {
             const result = try self.registry.getOrPut(self.loop.gpa, flow);
             if (!result.found_existing) {
@@ -108,21 +108,68 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 result.value_ptr.* = .empty;
             }
 
-            try result.value_ptr.append(self.loop.gpa, struct {
-                pub fn handle(request: *Request, ctx: *anyopaque) anyerror!void {
-                    if (Injector_Context == void) {
-                        try Injector.call(handler_func, request);
-                    } else {
-                        const injector_context: *Injector_Context = @alignCast(@ptrCast(ctx));
-                        try Injector.call(handler_func, .{
-                            .request = request,
-                            .context = injector_context,
-                        });
+            try result.value_ptr.append(self.loop.gpa, .{
+                .data = null,
+                .func = struct {
+                    pub fn handle(request: *Request, ctx: *anyopaque) anyerror!void {
+                        if (Injector_Context == void) {
+                            try Injector.call(handler_func, request);
+                        } else {
+                            const injector_context: *Injector_Context = @alignCast(@ptrCast(ctx));
+                            try Injector.call(handler_func, .{
+                                .request = request,
+                                .context = injector_context,
+                            });
+                        }
                     }
-                }
-            }.handle);
+                }.handle,
+            });
 
             log.debug("registered handler for flow: {s}", .{ flow });
+        }
+
+        /// `flow` must remain valid for the lifetime of the server
+        pub fn register_module(self: *Self, flow: []const u8, m: anytype) !void {
+            std.debug.assert(@typeInfo(@TypeOf(m)).pointer.size == .one);
+            const Ptr = @TypeOf(m);
+            const T = @TypeOf(m.*);
+
+            const Child_Injector = Injector.extend(struct {
+                pub fn inject_data(req: *Request) Ptr {
+                   return @ptrCast(@alignCast(req.internal.handler_data));
+                }
+            });
+
+            const handler_func = comptime routing.module(Child_Injector, T);
+
+            const result = try self.registry.getOrPut(self.loop.gpa, flow);
+            if (!result.found_existing) {
+                result.key_ptr.* = flow;
+                result.value_ptr.* = .empty;
+            }
+
+            try result.value_ptr.append(self.loop.gpa, .{
+                .data = m,
+                .func = struct {
+                    pub fn handle(request: *Request, ctx: *anyopaque) anyerror!void {
+                        if (Injector_Context == void) {
+                            try Child_Injector.call(handler_func, request);
+                        } else {
+                            const injector_context: *Injector_Context = @alignCast(@ptrCast(ctx));
+                            try Child_Injector.call(handler_func, .{
+                                .request = request,
+                                .context = injector_context,
+                            });
+                        }
+                    }
+                }.handle,
+            });
+
+            if (@hasDecl(T, "format")) {
+                log.debug("registered {f} module handler for flow: {s}", .{ m, flow });
+            } else {
+                log.debug("registered {s} module handler for flow: {s}", .{ @typeName(T), flow });
+            }
         }
 
         pub fn router(self: *Self, comptime prefix: []const u8, comptime routes: anytype) !void {
@@ -410,6 +457,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     .head_buffer = req.head_buffer,
                     .scratch_alloc = .init(&scratch_buffer),
                     .fallback_alloc = .init(self.loop.gpa),
+                    .handler_data = null,
                 },
             };
             defer request.internal.fallback_alloc.deinit();
@@ -655,6 +703,10 @@ const Handler_Context = struct {
 };
 
 pub const Handler_Func = *const fn (*Request, *anyopaque) anyerror!void;
+pub const Handler = struct {
+    data: ?*anyopaque,
+    func: Handler_Func,
+};
 
 const log = std.log.scoped(.http);
 const log_mem = std.log.scoped(.http_mem);

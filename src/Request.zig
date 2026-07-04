@@ -27,7 +27,7 @@ target: struct {
     }
 },
 
-handlers: std.Deque(server.Handler_Func),
+handlers: std.Deque(server.Handler),
 
 response: struct {
     headers: std.ArrayList(std.http.Header),
@@ -80,7 +80,8 @@ pub fn handle(self: *Request, ctx: *anyopaque, root_flow: []const u8) !void {
     _ = try self.chain(root_flow);
 
     while (self.handlers.popFront()) |handler| {
-        try handler(self, ctx);
+        self.internal.handler_data = handler.data;
+        try handler.func(self, ctx);
     }
 
     try self.end_response();

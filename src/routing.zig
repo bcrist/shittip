@@ -10,7 +10,7 @@ pub fn router(svr: anytype, comptime prefix: []const u8, comptime routes: anytyp
         const path = route[0];
         if (route.len > 1) {
             inline for (1..route.len) |i| {
-                if (maybe_string(&route[1])) |flow_name| {
+                if (maybe_string(&route[i])) |flow_name| {
                     try svr.register(prefix_without_placeholder ++ path, struct {
                         pub fn route_flow(req: *Request) !void {
                             _ = try req.chain(flow_name);
@@ -150,7 +150,15 @@ pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Han
 pub fn resource_with_content_type(comptime source_path: []const u8, comptime ct: ?Content_Type) struct { []const u8, Alloc_Handler } {
     return .{
         resource_path(source_path),
-        static_with_content_type(source_path, ct),
+        static_internal(.{
+            .content = resource_compressed_content(source_path),
+            .uncompressed_length = resource_uncompressed_length(source_path),
+            .content_encoding = .deflate,
+            .content_type = ct,
+            .cache_control = "max-age=31536000, immutable, public",
+            .etag = resource_etag(source_path),
+            .last_modified_utc = root.resources.build_time,
+        }),
     };
 }
 
@@ -167,7 +175,6 @@ pub fn static_with_content_type(comptime resource_source_path: []const u8, compt
         .uncompressed_length = resource_uncompressed_length(resource_source_path),
         .content_encoding = .deflate,
         .content_type = ct,
-        .cache_control = "max-age=31536000, immutable, public",
         .etag = resource_etag(resource_source_path),
         .last_modified_utc = root.resources.build_time,
     });
@@ -267,6 +274,10 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
     }.handler;
 }
 
+/// Note: if your module requires runtime state, you either need to:
+///     * Expose the state to all handlers via your server's injector context
+///     * Use server.register_module() to register a separate flow for the module,
+///       then delegate your path to that flow in the router (see Static_Updatable.zig for example)
 pub fn module(comptime Injector: type, comptime M: type) *const fn (*Request, Injector.Input) anyerror!void {
     return struct {
         pub fn handler(req: *Request, in: Injector.Input) anyerror!void {

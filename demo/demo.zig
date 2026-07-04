@@ -10,20 +10,27 @@ pub fn main(init: std.process.Init) !void {
     var server = http.default_server(&loop, .{});
     defer server.deinit();
 
-    const Injector = @TypeOf(server).Injector;
-    const r = http.routing;
+
+    const Module = comptime http.routing.Module(@TypeOf(server).Injector);
     try server.router("", .{
-        .{ "/", r.module(Injector, index) },
+        .{ "/", Module(index) },
         .{ "/something/**" },
         .{ "/something_else/**", "/something/**" },
-        r.resource("style.css"),
+        http.routing.resource("style.css"),
+        .{ "/semi-static", "semi_static" },
     });
 
     try server.router("/something/**", .{
-        .{ "shutdown", r.method(.GET), r.shutdown },
-        .{ "hello", r.module(Injector, hello) },
-        .{ "hello/id:*", r.module(Injector, hello) },
+        .{ "shutdown", http.routing.method(.GET), http.routing.shutdown },
+        .{ "hello", Module(hello) },
+        .{ "hello/id:*", Module(hello) },
     });
+
+    var updatable_module: http.Static_Updatable = try .init(init.gpa, loop.io, "updatable.zk", .{
+        .asdf = "1234",
+    }, .{}, http.Content_Type.text_utf8);
+    defer updatable_module.deinit();
+    try server.register_module("semi_static", &updatable_module);
 
     loop.start();
     defer loop.finish_running();
