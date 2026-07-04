@@ -104,12 +104,6 @@ pub fn chain(self: *Request, flow: []const u8) std.mem.Allocator.Error!bool {
     return false;
 }
 
-pub fn try_set_date(self: *Request) !void {
-    if (self.response.state == .not_started) {
-        _ = try self.maybe_add_response_header("date", try self.fmt_http_date(self.received_dt));
-    }
-}
-
 pub fn header_iterator(self: *Request) std.http.HeaderIterator {
     return std.http.HeaderIterator.init(self.internal.head_buffer);
 }
@@ -530,6 +524,10 @@ pub fn response_writer(self: *Request) !*std.Io.Writer {
                 self.req.head.target,
             });
 
+            if (self.get_response_header("date") == null) {
+                try self.add_response_header("date", try self.fmt_http_date(self.received_dt));
+            }
+
             const buf = try self.arena().alloc(u8, self.response.buffer_bytes);
 
             const should_clone_strings = try self.maybe_clone_strings_before_response();
@@ -646,6 +644,9 @@ pub fn end_response(self: *Request) !void {
 
 pub fn respond(self: *Request, content: []const u8) !void {
     try self.ensure_response_not_started();
+    if (self.get_response_header("date") == null) {
+        try self.add_response_header("date", try self.fmt_http_date(self.received_dt));
+    }
     self.response.state = .sent;
 
     log.info("{f}: [{d}] {t} {s}", .{
@@ -754,6 +755,10 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
 
     if (!options.empty_content) {
         try self.set_response_header("content-type", Content_Type.html_utf8.to_string());
+    }
+
+    if (self.get_response_header("date") == null) {
+        try self.add_response_header("date", try self.fmt_http_date(self.received_dt));
     }
 
     const content = try self.format_err_response(options);

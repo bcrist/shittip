@@ -18,6 +18,7 @@ pub const Start_Options = struct {
     temp_allocator_pool_size: usize = 16,
     temp_allocator_reservation_size: usize = 100 * 1024 * 1024,
     request_timeout: ?std.Io.Duration = .fromSeconds(30),
+    server_name: []const u8 = "",
 };
 
 pub const Lookup_And_Start_Options = struct {
@@ -224,7 +225,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             };
             errdefer server.deinit(self.loop.io);
 
-            self.tasks.group.concurrent(self.loop.io, listener, .{ self, self.server_num.?, server, options.request_timeout }) catch |err| {
+            self.tasks.group.concurrent(self.loop.io, listener, .{ self, self.server_num.?, server, options.request_timeout, options.server_name }) catch |err| {
                 if (options.stop_loop_on_listen_failure) {
                     self.loop.stop();
                 }
@@ -232,7 +233,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             };
         }
 
-        fn listener(self: *Self, server_num: usize, incoming_server: std.Io.net.Server, request_timeout: ?std.Io.Duration) std.Io.Cancelable!void {
+        fn listener(self: *Self, server_num: usize, incoming_server: std.Io.net.Server, request_timeout: ?std.Io.Duration, server_name: []const u8) std.Io.Cancelable!void {
             const io = self.loop.io;
 
             var server = incoming_server;
@@ -271,7 +272,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     return;
                 }
 
-                self.tasks.group.concurrent(io, process_connection, .{ self, cid, stream, request_timeout }) catch |err| {
+                self.tasks.group.concurrent(io, process_connection, .{ self, cid, stream, request_timeout, server_name }) catch |err| {
                     stream.close(io);
                     log.debug("{f}: Closing connection: {}", .{ cid, err });
                 };
@@ -280,7 +281,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             }
         }
 
-        fn process_connection(self: *Self, cid: Connection_Id, stream: std.Io.net.Stream, request_timeout: ?std.Io.Duration) std.Io.Cancelable!void {
+        fn process_connection(self: *Self, cid: Connection_Id, stream: std.Io.net.Stream, request_timeout: ?std.Io.Duration, server_name: []const u8) std.Io.Cancelable!void {
             const io = self.loop.io;
             defer stream.close(io);
 
@@ -335,7 +336,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
 
                 const timeout: std.Io.Timeout = if (request_timeout) |duration| .{ .duration = .{ .clock = .awake, .raw = duration } } else .none;
                 // TODO https://codeberg.org/ziglang/zig/issues/31098
-                var proc = self.loop.io.concurrent(process_request, .{ self, ctx, request, timeout }) catch {
+                var proc = self.loop.io.concurrent(process_request, .{ self, ctx, request, server_name, timeout }) catch {
                     log.info("{f}: Closing connection (insufficient concurrency available)", .{ cid });
                     return ctx.propagate_cancel();
                 };
@@ -346,7 +347,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             }
         }
 
-        fn process_request(self: *Self, ctx: Handler_Context, req: std.http.Server.Request, timeout: std.Io.Timeout) std.Io.Cancelable!void {
+        fn process_request(self: *Self, ctx: Handler_Context, req: std.http.Server.Request, server_name: []const u8, timeout: std.Io.Timeout) std.Io.Cancelable!void {
             log.debug("{f}: {t} {s}", .{ ctx.cid, req.head.method, req.head.target });
             defer log.debug("{f}: Finished processing request", .{ ctx.cid });
 
@@ -362,7 +363,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             select.concurrent(.timeout, std.Io.Timeout.sleep, .{ timeout, self.loop.io }) catch {
                 log.warn("Failed to start timeout task for {f}", .{ ctx.cid });
             };
-            select.async(.request, process_request_inner, .{ self, ctx, req });
+            select.async(.request, process_request_inner, .{ self, ctx, req, server_name });
 
             switch (try select.await()) {
                 .request => |result| return result,
@@ -370,7 +371,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             }
         }
 
-        fn process_request_inner(self: *Self, ctx: Handler_Context, req: std.http.Server.Request) std.Io.Cancelable!void {
+        fn process_request_inner(self: *Self, ctx: Handler_Context, req: std.http.Server.Request, server_name: []const u8) std.Io.Cancelable!void {
             const begin_ts: std.Io.Timestamp = .now(self.loop.io, .real);
             const dt = tempora.Date_Time.With_Offset.from_timestamp(begin_ts, &tempora.Timezone.utc).dt;
 
@@ -412,6 +413,15 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 },
             };
             defer request.internal.fallback_alloc.deinit();
+
+            if (server_name.len > 0) {
+                request.add_response_header("server", server_name) catch |err| switch (err) {
+                    error.ResponseAlreadyStarted => unreachable,
+                    error.OutOfMemory => |e| {
+                        log.warn("{f}: Failed to set response server name header: {t}", .{ ctx.cid, e });
+                    },
+                };
+            }
 
             defer {
                 const end_ts: std.Io.Timestamp = .now(self.loop.io, .real);
