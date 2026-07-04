@@ -219,8 +219,6 @@ pub fn static_internal(comptime options: Static_Internal_Route_Options) Alloc_Ha
                 else => return error.MethodNotAllowed,
             }
 
-            try req.try_set_date();
-
             try req.maybe_add_common_response_headers_comptime(.{
                 .content_type = options.content_type,
                 .content_disposition = options.content_disposition,
