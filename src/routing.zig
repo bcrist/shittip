@@ -150,16 +150,27 @@ pub fn resource(comptime source_path: []const u8) struct { []const u8, Alloc_Han
 pub fn resource_with_content_type(comptime source_path: []const u8, comptime ct: ?Content_Type) struct { []const u8, Alloc_Handler } {
     return .{
         resource_path(source_path),
-        static_internal(.{
-            .content = resource_compressed_content(source_path),
-            .uncompressed_length = resource_uncompressed_length(source_path),
-            .content_encoding = .deflate,
-            .content_type = ct,
-            .cache_control = "max-age=31536000, immutable, public",
-            .etag = resource_etag(source_path),
-            .last_modified_utc = root.resources.build_time,
-        }),
+        static_with_content_type(source_path, ct),
     };
+}
+
+pub fn static(comptime resource_source_path: []const u8) Alloc_Handler {
+    @setEvalBranchQuota(5000); // for content_type.lookup
+    const extension = std.Io.Dir.path.extension(resource_source_path);
+    const ct = Content_Type.ext_lookup.get(extension);
+    return static_with_content_type(resource_source_path, ct);
+}
+
+pub fn static_with_content_type(comptime resource_source_path: []const u8, comptime ct: ?Content_Type) Alloc_Handler {
+    return static_internal(.{
+        .content = resource_compressed_content(resource_source_path),
+        .uncompressed_length = resource_uncompressed_length(resource_source_path),
+        .content_encoding = .deflate,
+        .content_type = ct,
+        .cache_control = "max-age=31536000, immutable, public",
+        .etag = resource_etag(resource_source_path),
+        .last_modified_utc = root.resources.build_time,
+    });
 }
 
 pub fn resource_path(comptime source_path: []const u8) []const u8 {
