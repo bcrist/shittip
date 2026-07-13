@@ -376,7 +376,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     },
                     error.ReadFailed => {
                         try ctx.propagate_cancel();
-                        ctx.log_error("Failed to read headers", err, @errorReturnTrace());
+                        ctx.log_error("Failed to read headers", ctx.reader.err orelse err, @errorReturnTrace());
                         return;
                     },
                 };
@@ -388,8 +388,9 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     return ctx.propagate_cancel();
                 };
                 try proc.await(self.loop.io);
-                if (http_server.reader.state != .ready) {
-                    log.info("{f}: Closing connection (handler failed)", .{ cid });
+                switch (http_server.reader.state) {
+                    .ready, .closing => {},
+                    else => |state| log.info("{f}: Closing connection (HTTP reader left in unexpected state: {t})", .{ cid, state }),
                 }
             }
         }
