@@ -845,6 +845,7 @@ pub fn maybe_respond_err(self: *Request, options: Respond_Err_Options) !void {
         if (options.trace) |ert| {
             std.debug.dumpErrorReturnTrace(ert);
         }
+        self.req.server.reader.state = .closing;
         return;
     }
 
