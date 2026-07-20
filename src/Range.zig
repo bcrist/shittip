@@ -316,6 +316,9 @@ pub const Writer = struct {
         }
         
         if (self.skip_remaining == 0 and self.body_remaining > 0 and (header.len > 0 or data_mut.len > 1 or splat_mut > 0 and data_mut[data_mut.len - 1].len > 0)) {
+            // make sure we don't lose track of bytes in case self.out.writeSplatHeaderLimit returns an error:
+            if (processed_bytes > w.end) return processed_bytes - w.end;
+
             const bytes_written = try self.out.writeSplatHeaderLimit(header, data_mut, splat_mut, .limited(self.body_remaining));
             processed_bytes += bytes_written;
             self.body_remaining -= bytes_written;
@@ -357,7 +360,10 @@ pub const Writer = struct {
                         file_reader.seek_err = err;
                         return error.ReadFailed;
                     };
-                    limit_mut = limit_mut.subtract(seek_limit.toInt().?).?;
+                    const skipped_bytes = seek_limit.toInt().?;
+                    limit_mut = limit_mut.subtract(skipped_bytes).?;
+                    processed_bytes += skipped_bytes;
+                    self.skip_remaining -= skipped_bytes;
                 }
             }
         }
@@ -370,6 +376,9 @@ pub const Writer = struct {
                 if (processed_bytes < w.end) return 0;
             }
 
+            // ensure we don't lose track of bytes if self.out.sendFile returns an error.Unimplemented, etc.
+            if (processed_bytes > w.end) return processed_bytes - w.end;
+
             const new_limit: std.Io.Limit = .min(limit_mut, .limited(self.body_remaining));
 
             const sendfile_bytes = try self.out.sendFile(file_reader, new_limit);
@@ -378,7 +387,7 @@ pub const Writer = struct {
             return processed_bytes - w.end;
         }
 
-        return 0;
+        return if (processed_bytes < w.end) 0 else processed_bytes - w.end;
     }
 };
 
