@@ -589,6 +589,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
 
                     if (actual_err == error.ConnectionResetByPeer) {
                         log.debug("{f}: {t}", .{ ctx.cid, err });
+                        return ctx.propagate_cancel();
                     } else {
                         request.maybe_respond_err(.{
                             .status = switch (actual_err) {
@@ -605,6 +606,13 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         };
                     }
                     ctx.server.reader.state = .closing;
+                }
+
+                if (request.response.state != .not_started) {
+                    request.end_response() catch |err2| {
+                        _ = err2;
+                        ctx.server.reader.state = .closing;
+                    };
                 }
             };
 
