@@ -609,8 +609,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 }
 
                 if (request.response.state != .not_started) {
-                    request.end_response() catch |err2| {
-                        _ = err2;
+                    request.end_response() catch {
                         ctx.server.reader.state = .closing;
                     };
                 }
