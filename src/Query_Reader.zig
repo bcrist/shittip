@@ -86,8 +86,8 @@ pub fn next(self: *Query_Reader) !?Query_Param {
     if (entry.len == 0 and self.end_of_stream_reached) return null;
 
     if (std.mem.indexOfScalar(u8, entry, '=')) |end_of_name| {
-        var name = try percent_encoding.decode_maybe_append(&self.temp, entry[0..end_of_name], .default);
-        const value = try percent_encoding.decode_maybe_append(&self.temp, entry[end_of_name + 1 ..], .default);
+        var name = try percent_encoding.decode_maybe_append(self.allocator, &self.temp, entry[0..end_of_name], .default);
+        const value = try percent_encoding.decode_maybe_append(self.allocator, &self.temp, entry[end_of_name + 1 ..], .default);
         if (name.ptr != entry.ptr) {
             // decoding `value` may have enlarged self.decode_temp.items, causing its address to change
             name.ptr = self.temp.items.ptr;
@@ -98,7 +98,7 @@ pub fn next(self: *Query_Reader) !?Query_Param {
         };
     } else {
         return .{
-            .name = try percent_encoding.decode_maybe_append(&self.temp, entry, .default),
+            .name = try percent_encoding.decode_maybe_append(self.allocator, &self.temp, entry, .default),
             .value = null,
         };
     }
