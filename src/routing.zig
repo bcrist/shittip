@@ -295,6 +295,7 @@ pub fn module(comptime Injector: type, comptime M: type) *const fn (*Request, In
                 .OPTIONS => if (@hasDecl(M, "options")) return try Injector.call(M.options, in),
                 .TRACE => if (@hasDecl(M, "trace")) return try Injector.call(M.trace, in),
                 .PATCH => if (@hasDecl(M, "patch")) return try Injector.call(M.patch, in),
+                .QUERY => if (@hasDecl(M, "query")) return try Injector.call(M.query, in),
             }
 
             return error.MethodNotAllowed;
