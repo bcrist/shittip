@@ -1,8 +1,8 @@
 .{
     .name = .shittip,
     .fingerprint = 0x63f6db5671109b97,
-    .version = "0.5.10",
-    .minimum_zig_version = "0.17.0-dev.1465+8b2d0ce21",
+    .version = "0.5.11",
+    .minimum_zig_version = "0.17.0-dev.1732+91c8116b2",
     .paths = .{
         "src",
         "tools",
@@ -24,8 +24,8 @@
             .hash = "percent_encoding-0.1.0-wAmwgBCBAACSa6CXb_D7P9MXXwQq8DQqGY2fOafsCtSB",
         },
         .zkittle = .{
-            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#fae8724c1952259590099b64e0554e6e98052231",
-            .hash = "zkittle-0.2.3-Nt34TDBZAQDMwEje-h16BgRjE6FD8GP6avnniVY-H6KQ",
+            .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#2275c3a56587ed9b44c7397dd17af7db164e4dcf",
+            .hash = "zkittle-0.2.4-Nt34TCVZAQCmG-zd4jhSPrjrY3exyXXtKRJEri6k8I_H",
         },
         .dizzy = .{
             .url = "git+https://codeberg.org/bcrist/dizzy?ref=zig-master#7d5d82ed83001a9c236402348f744fb3d6bdb5c8",
