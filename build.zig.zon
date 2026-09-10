@@ -1,7 +1,7 @@
 .{
     .name = .shittip,
     .fingerprint = 0x63f6db5671109b97,
-    .version = "0.5.11",
+    .version = "0.5.12",
     .minimum_zig_version = "0.17.0-dev.1732+91c8116b2",
     .paths = .{
         "src",
