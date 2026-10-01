@@ -436,7 +436,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 .response = .{
                     .headers = .empty,
                     .version = req.head.version,
-                    .status = .ok,
+                    .status = @enumFromInt(0),
                     .reason = null,
                     .keep_alive = true,
                     .transfer_encoding = null,
@@ -611,11 +611,9 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                     }
                 }
 
-                if (request.response.state != .not_started) {
-                    request.end_response() catch {
-                        ctx.server.reader.state = .closing;
-                    };
-                }
+                request.end_response() catch {
+                    ctx.server.reader.state = .closing;
+                };
             };
 
             return ctx.propagate_cancel();

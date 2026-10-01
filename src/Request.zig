@@ -84,7 +84,20 @@ pub fn handle(self: *Request, ctx: *anyopaque, root_flow: []const u8) !void {
         try handler.func(self, ctx);
     }
 
-    try self.end_response();
+    if (self.response.state == .not_started) {
+        if (@backingInt(self.response.status) == 0) {
+            // Generally this means we didn't find a handler that was able to actually service the request.
+            // For requests that intentionally have no response, self.response.status should have been set
+            // to .ok, .no_content, .created, .accepted, etc.
+            return error.NotFound;
+        }
+        try self.respond_err(.{
+            .status = self.response.status,
+            .empty_content = @backingInt(self.response.status) < 400,
+        });
+    } else {
+        try self.end_response();
+    }
 }
 
 pub fn chain(self: *Request, flow: []const u8) std.mem.Allocator.Error!bool {
@@ -518,6 +531,9 @@ fn maybe_clone_strings_before_response(self: *Request) !bool {
 pub fn response_writer(self: *Request) !*std.Io.Writer {
     switch (self.response.state) {
         .not_started => {
+            if (@backingInt(self.response.status) == 0) {
+                self.response.status = .ok;
+            }
             log.info("{f}: [{d}] {t} {s}", .{
                 self.cid,
                 @intFromEnum(self.response.status),
@@ -568,7 +584,11 @@ pub fn response_writer_ranged(self: *Request, content_length: usize, options: Mu
 }
 
 fn make_response_writer_ranged(self: *Request, content_length: usize, iterator: Range.Iterator, options: Multipart_Options) !*std.Io.Writer {
-    if (self.response.status != .ok) return try self.response_writer();
+    switch (self.response.status) {
+        @enumFromInt(0) => self.response.status = .ok,
+        .ok => {},
+        else => return try self.response_writer(),
+    }
     
     std.debug.assert(self.response.state == .not_started);
 
@@ -629,17 +649,30 @@ pub fn end_response(self: *Request) !void {
     switch (self.response.state) {
         .not_started => return error.ResponseNotStarted,
         .streaming => |*bw| {
-            try bw.end();
+            try self.maybe_end_body_writer(bw);
             self.response.state = .sent;
         },
         .ranged_streaming => |w| {
-            const range_writer: *Range.Writer = @alignCast(@fieldParentPtr("interface", w));
-            try range_writer.finish();
-            const body_writer: *std.http.BodyWriter = @alignCast(@fieldParentPtr("writer", range_writer.out));
-            try body_writer.end();
+            const rw: *Range.Writer = @alignCast(@fieldParentPtr("interface", w));
+            try rw.finish();
+            const bw: *std.http.BodyWriter = @alignCast(@fieldParentPtr("writer", rw.out));
+            try self.maybe_end_body_writer(bw);
             self.response.state = .sent;
         },
         .sent => {},
+    }
+}
+fn maybe_end_body_writer(self: *Request, bw: *std.http.BodyWriter) !void {
+    if (bw.state == .content_length) {
+        try bw.writer.flush();
+        if (bw.state.content_length > 0) {
+            log.warn("{f}: Ending response before all content has been written (expected {} more bytes)", .{ self.cid, bw.state.content_length });
+            bw.state = .end;
+            self.req.server.reader.state = .closing;
+        }
+        try bw.http_protocol_output.flush();
+    } else {
+        try bw.end();
     }
 }
 
@@ -649,6 +682,10 @@ pub fn respond(self: *Request, content: []const u8) !void {
         try self.add_response_header("date", try self.fmt_http_date(self.received_dt));
     }
     self.response.state = .sent;
+
+    if (@backingInt(self.response.status) == 0) {
+        self.response.status = .ok;
+    }
 
     log.info("{f}: [{d}] {t} {s}", .{
         self.cid,
@@ -665,8 +702,10 @@ pub fn respond(self: *Request, content: []const u8) !void {
 }
 
 pub fn respond_ranged(self: *Request, content: []const u8, options: Multipart_Options) !void {
-    if (self.response.status != .ok) {
-        return try self.respond(content);
+    switch (self.response.status) {
+        @enumFromInt(0) => self.response.status = .ok,
+        .ok => {},
+        else => return try self.respond(content),
     }
 
     if (try self.range("bytes", options.ignore_bad_range)) |iterator| {
