@@ -56,7 +56,7 @@ fn alloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: us
     const self: *Request_Internal = @ptrCast(@alignCast(ctx));
 
     if (std.heap.FixedBufferAllocator.alloc(&self.scratch_alloc, len, alignment, ret_addr)) |ptr| return ptr;
-    
+
     const entropy: usize = @intCast(std.Io.Timestamp.now(self.loop.io, .awake).toNanoseconds() & 0xFFFF);
     const ta = self.temp_allocator(entropy) catch {
         return arena_alloc_vtable.alloc(&self.fallback_alloc, len, alignment, ret_addr);
@@ -69,7 +69,7 @@ fn alloc_thread_safe(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, 
     const self: *Request_Internal = @ptrCast(@alignCast(ctx));
 
     if (fba_vtable_thread_safe.alloc(&self.scratch_alloc, len, alignment, ret_addr)) |ptr| return ptr;
-    
+
     if (self.ta_pool.index) |index| {
         return ta_vtable_thread_safe.alloc(&self.ta_pool.allocators[index], len, alignment, ret_addr);
     }
@@ -147,7 +147,7 @@ fn remap_thread_safe(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment
 
 fn free(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
     const self: *Request_Internal = @ptrCast(@alignCast(ctx));
-    
+
     if (self.scratch_alloc.ownsPtr(buf.ptr)) {
         return std.heap.FixedBufferAllocator.free(&self.scratch_alloc, buf, alignment, ret_addr);
     }
@@ -164,7 +164,7 @@ fn free(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, ret_addr: usiz
 
 fn free_thread_safe(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
     const self: *Request_Internal = @ptrCast(@alignCast(ctx));
-    
+
     if (self.scratch_alloc.ownsPtr(buf.ptr)) {
         return fba_vtable_thread_safe.free(&self.scratch_alloc, buf, alignment, ret_addr);
     }

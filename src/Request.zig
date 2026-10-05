@@ -38,7 +38,7 @@ response: struct {
     transfer_encoding: ?std.http.TransferEncoding,
     content_length: ?u64,
     buffer_bytes: usize,
-    state: union (enum) {
+    state: union(enum) {
         not_started,
         streaming: std.http.BodyWriter,
         ranged_streaming: *std.Io.Writer,
@@ -163,7 +163,7 @@ pub fn get_path_param(self: *Request, name: []const u8) !?[]const u8 {
     while (iter.next()) |part| {
         if (std.mem.indexOfScalar(u8, part, ':')) |end| {
             temp.clearRetainingCapacity();
-            const prefix = try percent_encoding.decode_maybe_append(allocator, &temp, part[0 .. end], .{});
+            const prefix = try percent_encoding.decode_maybe_append(allocator, &temp, part[0..end], .{});
             if (std.mem.eql(u8, name, prefix)) {
                 temp.clearRetainingCapacity();
                 return try percent_encoding.decode_maybe_append(allocator, &temp, part[end + 1 ..], .{});
@@ -239,11 +239,7 @@ pub fn body_reader(self: *Request) !*std.Io.Reader {
             },
             .identity => {
                 const transfer_buffer = try allocator.alloc(u8, 4096);
-                self.internal.body = self.req.server.reader.bodyReader(
-                    transfer_buffer,
-                    self.req.head.transfer_encoding,
-                    self.req.head.content_length
-                );
+                self.internal.body = self.req.server.reader.bodyReader(transfer_buffer, self.req.head.transfer_encoding, self.req.head.content_length);
             },
         }
     } else {
@@ -295,7 +291,7 @@ pub fn ensure_response_not_started(self: *Request) !void {
     if (self.response.state != .not_started) return error.ResponseAlreadyStarted;
 }
 
-const Header_Error = error {
+const Header_Error = error{
     ResponseAlreadyStarted,
     OutOfMemory,
 };
@@ -316,7 +312,7 @@ pub fn maybe_add_response_header(self: *Request, name: []const u8, value: []cons
             return false;
         }
     }
-    
+
     try self.response.headers.append(self.arena(), .{
         .name = name,
         .value = value,
@@ -361,7 +357,7 @@ pub fn maybe_add_common_response_headers_comptime(self: *Request, comptime heade
     const DTO = tempora.Date_Time.With_Offset;
 
     if (headers.date_utc) |dt| {
-        const str = std.fmt.comptimePrint("{f}", .{ comptime dt.with_offset(0).fmt(DTO.http) });
+        const str = std.fmt.comptimePrint("{f}", .{comptime dt.with_offset(0).fmt(DTO.http)});
         _ = try self.maybe_add_response_header("date", str);
     }
     if (headers.content_type) |ct| {
@@ -377,7 +373,7 @@ pub fn maybe_add_common_response_headers_comptime(self: *Request, comptime heade
         _ = try self.maybe_add_response_header("etag", "\"" ++ etag ++ "\"");
     }
     if (headers.last_modified_utc) |dt| {
-        const str = std.fmt.comptimePrint("{f}", .{ comptime dt.with_offset(0).fmt(DTO.http) });
+        const str = std.fmt.comptimePrint("{f}", .{comptime dt.with_offset(0).fmt(DTO.http)});
         _ = try self.maybe_add_response_header("last-modified", str);
     }
 }
@@ -399,7 +395,7 @@ pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Respons
         if (self.get_response_header("content-type") == null) {
             try self.response.headers.append(allocator, .{
                 .name = "content-type",
-                .value = try self.fmt("{f}", .{ ct }),
+                .value = try self.fmt("{f}", .{ct}),
             });
         }
     }
@@ -407,7 +403,7 @@ pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Respons
         if (self.get_response_header("content-disposition") == null) {
             try self.response.headers.append(allocator, .{
                 .name = "content-disposition",
-                .value = try self.fmt("{f}", .{ cd }),
+                .value = try self.fmt("{f}", .{cd}),
             });
         }
     }
@@ -418,7 +414,7 @@ pub fn maybe_add_common_response_headers(self: *Request, headers: Common_Respons
         if (self.get_response_header("etag") == null) {
             try self.response.headers.append(allocator, .{
                 .name = "etag",
-                .value = try self.fmt("\"{s}\"", .{ etag }),
+                .value = try self.fmt("\"{s}\"", .{etag}),
             });
         }
     }
@@ -473,7 +469,7 @@ pub fn check_not_modified(self: *Request, maybe_last_modified_utc: ?tempora.Date
     }
 }
 
-const Range_Error = error {
+const Range_Error = error{
     BadRequest,
 } || Header_Error;
 
@@ -497,7 +493,7 @@ pub fn range(self: *Request, unit: []const u8, ignore_bad_range: bool) Range_Err
                 const last_modified = DTO.from_string(DTO.http, response_last_modified) catch return null;
                 if (std.meta.eql(if_range_last_modified, last_modified)) return iter;
             }
-            
+
             return null;
         }
 
@@ -536,7 +532,7 @@ pub fn response_writer(self: *Request) !*std.Io.Writer {
             }
             log.info("{f}: [{d}] {t} {s}", .{
                 self.cid,
-                @intFromEnum(self.response.status),
+                @backingInt(self.response.status),
                 self.req.head.method,
                 self.req.head.target,
             });
@@ -585,11 +581,11 @@ pub fn response_writer_ranged(self: *Request, content_length: usize, options: Mu
 
 fn make_response_writer_ranged(self: *Request, content_length: usize, iterator: Range.Iterator, options: Multipart_Options) !*std.Io.Writer {
     switch (self.response.status) {
-        @enumFromInt(0) => self.response.status = .ok,
+        @fromBackingInt(@intCast(0)) => self.response.status = .ok,
         .ok => {},
         else => return try self.response_writer(),
     }
-    
+
     std.debug.assert(self.response.state == .not_started);
 
     const allocator = self.arena();
@@ -597,7 +593,7 @@ fn make_response_writer_ranged(self: *Request, content_length: usize, iterator: 
     if (iterator.coalesce(allocator, content_length, 50)) |ranges| {
         if (ranges.len == 0) {
             if (!options.ignore_range_not_satisfiable) {
-                try self.set_response_header("content-range", try self.fmt("bytes */{d}", .{ content_length }));
+                try self.set_response_header("content-range", try self.fmt("bytes */{d}", .{content_length}));
                 return error.RangeNotSatisfiable;
             }
         } else {
@@ -624,7 +620,7 @@ fn make_response_writer_ranged(self: *Request, content_length: usize, iterator: 
                 try ranges[0].set_header(content_length, self);
             } else {
                 content_type = self.get_response_header("content-type") orelse "";
-                try self.set_response_header("content-type", try self.fmt("multipart/byteranges; boundary={s}", .{ options.boundary }));
+                try self.set_response_header("content-type", try self.fmt("multipart/byteranges; boundary={s}", .{options.boundary}));
             }
 
             _ = try self.response_writer();
@@ -634,7 +630,7 @@ fn make_response_writer_ranged(self: *Request, content_length: usize, iterator: 
 
             self.response.state = .{ .ranged_streaming = &rw.interface };
             return &rw.interface;
-        }            
+        }
     } else |err| switch (err) {
         error.OutOfMemory => {},
         error.BadRange => {
@@ -689,7 +685,7 @@ pub fn respond(self: *Request, content: []const u8) !void {
 
     log.info("{f}: [{d}] {t} {s}", .{
         self.cid,
-        @intFromEnum(self.response.status),
+        @backingInt(self.response.status),
         self.req.head.method,
         self.req.head.target,
     });
@@ -703,7 +699,7 @@ pub fn respond(self: *Request, content: []const u8) !void {
 
 pub fn respond_ranged(self: *Request, content: []const u8, options: Multipart_Options) !void {
     switch (self.response.status) {
-        @enumFromInt(0) => self.response.status = .ok,
+        @fromBackingInt(@intCast(0)) => self.response.status = .ok,
         .ok => {},
         else => return try self.respond(content),
     }
@@ -712,7 +708,7 @@ pub fn respond_ranged(self: *Request, content: []const u8, options: Multipart_Op
         if (iterator.coalesce(self.arena(), content.len, 50)) |ranges| {
             if (ranges.len == 0) {
                 if (!options.ignore_range_not_satisfiable) {
-                    try self.set_response_header("content-range", try self.fmt("bytes */{d}", .{ content.len }));
+                    try self.set_response_header("content-range", try self.fmt("bytes */{d}", .{content.len}));
                     return error.RangeNotSatisfiable;
                 }
             } else if (ranges.len == 1) {
@@ -722,7 +718,7 @@ pub fn respond_ranged(self: *Request, content: []const u8, options: Multipart_Op
                 return;
             } else {
                 const content_type = self.get_response_header("content-type") orelse "";
-                try self.set_response_header("content-type", try self.fmt("multipart/byteranges; boundary={s}", .{ options.boundary }));
+                try self.set_response_header("content-type", try self.fmt("multipart/byteranges; boundary={s}", .{options.boundary}));
                 self.response.status = .partial_content;
                 self.response.content_length = null;
                 const writer = try self.response_writer();
@@ -754,7 +750,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
         if (options.err) |err| {
             log.err("{f}: [{} {t} after response started] {t} {s}", .{
                 self.cid,
-                @intFromEnum(options.status),
+                @backingInt(options.status),
                 err,
                 self.req.head.method,
                 self.req.head.target,
@@ -762,7 +758,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
         } else {
             log.err("{f}: [{} after response started] {t} {s}", .{
                 self.cid,
-                @intFromEnum(options.status),
+                @backingInt(options.status),
                 self.req.head.method,
                 self.req.head.target,
             });
@@ -776,7 +772,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
     if (options.err) |e| {
         log.warn("{f}: [{} {t}] {t} {s}", .{
             self.cid,
-            @intFromEnum(options.status),
+            @backingInt(options.status),
             e,
             self.req.head.method,
             self.req.head.target,
@@ -784,7 +780,7 @@ pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
     } else {
         log.info("{f}: [{}] {t} {s}", .{
             self.cid,
-            @intFromEnum(options.status),
+            @backingInt(options.status),
             self.req.head.method,
             self.req.head.target,
         });
@@ -825,12 +821,12 @@ pub fn format_err_response(self: *Request, options: Respond_Err_Options) ![]cons
         \\<body>
         \\<h1>{} {s}</h1>
         \\
-        , .{
-            @intFromEnum(options.status),
-            options.status.phrase() orelse "",
-            @intFromEnum(options.status),
-            options.status.phrase() orelse "",
-        });
+    , .{
+        @backingInt(options.status),
+        options.status.phrase() orelse "",
+        @backingInt(options.status),
+        options.status.phrase() orelse "",
+    });
 
     if (options.context_vec.len > 0) {
         try w.writeAll("<pre>\n");
@@ -841,7 +837,7 @@ pub fn format_err_response(self: *Request, options: Respond_Err_Options) ![]cons
     }
 
     if (options.err) |err| {
-        try w.print("<h3>{s}</h3>\n", .{ @errorName(err) });
+        try w.print("<h3>{s}</h3>\n", .{@errorName(err)});
     }
 
     if (options.trace) |ert| {
@@ -858,7 +854,7 @@ pub fn format_err_response(self: *Request, options: Respond_Err_Options) ![]cons
         \\</body>
         \\</html>
         \\
-        );
+    );
 
     return content.written();
 }
@@ -868,7 +864,7 @@ pub fn maybe_respond_err(self: *Request, options: Respond_Err_Options) !void {
         if (options.err) |err| {
             log.err("{f}: [{} {t} after response started; suppressed] {t} {s}", .{
                 self.cid,
-                @intFromEnum(options.status),
+                @backingInt(options.status),
                 err,
                 self.req.head.method,
                 self.req.head.target,
@@ -876,7 +872,7 @@ pub fn maybe_respond_err(self: *Request, options: Respond_Err_Options) !void {
         } else {
             log.err("{f}: [{} after response started; suppressed] {t} {s}", .{
                 self.cid,
-                @intFromEnum(options.status),
+                @backingInt(options.status),
                 self.req.head.method,
                 self.req.head.target,
             });
@@ -918,7 +914,7 @@ pub fn fmt(self: *Request, comptime pattern: []const u8, args: anytype) std.mem.
 }
 
 pub fn fmt_http_date(self: *Request, dt: tempora.Date_Time) std.mem.Allocator.Error![]u8 {
-    return std.fmt.allocPrint(self.arena_thread_safe(), "{f}", .{ dt.with_offset(0).fmt(tempora.Date_Time.With_Offset.http) });
+    return std.fmt.allocPrint(self.arena_thread_safe(), "{f}", .{dt.with_offset(0).fmt(tempora.Date_Time.With_Offset.http)});
 }
 
 const log = std.log.scoped(.http);

@@ -10,11 +10,10 @@ pub fn main(init: std.process.Init) !void {
     var server = http.default_server(&loop, .{});
     defer server.deinit();
 
-
     const Module = comptime http.routing.Module(@TypeOf(server).Injector);
     try server.router("", .{
         .{ "/", Module(index) },
-        .{ "/something/**" },
+        .{"/something/**"},
         .{ "/something_else/**", "/something/**" },
         http.routing.resource("style.css"),
         .{ "/semi-static", "semi_static" },
@@ -36,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
     defer loop.finish_running();
 
     try server.lookup_and_start("localhost", 21345, .{});
-    
+
     loop.begin_running();
 }
 

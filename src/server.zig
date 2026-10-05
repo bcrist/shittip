@@ -54,7 +54,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
         const Self = @This();
 
         pub const init = if (Injector_Context == void) init_void else init_context;
-        
+
         pub fn init_context(loop: *Loop, injector_context: Injector_Context) Self {
             return .{
                 .loop = loop,
@@ -115,7 +115,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         if (Injector_Context == void) {
                             try Injector.call(handler_func, request);
                         } else {
-                            const injector_context: *Injector_Context = @alignCast(@ptrCast(ctx));
+                            const injector_context: *Injector_Context = @ptrCast(@alignCast(ctx));
                             try Injector.call(handler_func, .{
                                 .request = request,
                                 .context = injector_context,
@@ -125,7 +125,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 }.handle,
             });
 
-            log.debug("registered handler for flow: {s}", .{ flow });
+            log.debug("registered handler for flow: {s}", .{flow});
         }
 
         /// `flow` must remain valid for the lifetime of the server
@@ -136,7 +136,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
 
             const Child_Injector = Injector.extend(struct {
                 pub fn inject_data(req: *Request) Ptr {
-                   return @ptrCast(@alignCast(req.internal.handler_data));
+                    return @ptrCast(@alignCast(req.internal.handler_data));
                 }
             });
 
@@ -155,7 +155,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         if (Injector_Context == void) {
                             try Child_Injector.call(handler_func, request);
                         } else {
-                            const injector_context: *Injector_Context = @alignCast(@ptrCast(ctx));
+                            const injector_context: *Injector_Context = @ptrCast(@alignCast(ctx));
                             try Child_Injector.call(handler_func, .{
                                 .request = request,
                                 .context = injector_context,
@@ -299,7 +299,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                         continue;
                     },
                     error.ConnectionAborted => {
-                        log.debug("{f}: Connection request was aborted remotely before the connection could be established", .{ cid });
+                        log.debug("{f}: Connection request was aborted remotely before the connection could be established", .{cid});
                         continue;
                     },
                     else => {
@@ -315,7 +315,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
 
                 if (self.loop.state() != .running) {
                     stream.close(io);
-                    log.debug("{f}: Closing connection: server is shutting down", .{ cid });
+                    log.debug("{f}: Closing connection: server is shutting down", .{cid});
                     return;
                 }
 
@@ -359,19 +359,19 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                             ctx.log_error("Failed to write response", response_err, @errorReturnTrace());
                             return ctx.propagate_cancel();
                         };
-                        log.info("{f}: Closing connection (sent 431)", .{ cid });
+                        log.info("{f}: Closing connection (sent 431)", .{cid});
                         return ctx.propagate_cancel();
                     },
                     error.HttpHeadersInvalid => {
-                        log.info("{f}: Closing connection (client sent invalid request)", .{ cid });
+                        log.info("{f}: Closing connection (client sent invalid request)", .{cid});
                         return ctx.propagate_cancel();
                     },
                     error.HttpRequestTruncated => {
-                        log.debug("{f}: Closing connection (client closed before finishing headers)", .{ cid });
+                        log.debug("{f}: Closing connection (client closed before finishing headers)", .{cid});
                         return ctx.propagate_cancel();
                     },
                     error.HttpConnectionClosing => {
-                        log.debug("{f}: Closing connection normally (client closed first)", .{ cid });
+                        log.debug("{f}: Closing connection normally (client closed first)", .{cid});
                         return ctx.propagate_cancel();
                     },
                     error.ReadFailed => {
@@ -384,7 +384,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 const timeout: std.Io.Timeout = if (request_timeout) |duration| .{ .duration = .{ .clock = .awake, .raw = duration } } else .none;
                 // TODO https://codeberg.org/ziglang/zig/issues/31098
                 var proc = self.loop.io.concurrent(process_request, .{ self, ctx, request, server_name, timeout }) catch {
-                    log.info("{f}: Closing connection (insufficient concurrency available)", .{ cid });
+                    log.info("{f}: Closing connection (insufficient concurrency available)", .{cid});
                     return ctx.propagate_cancel();
                 };
                 try proc.await(self.loop.io);
@@ -397,9 +397,9 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
 
         fn process_request(self: *Self, ctx: Handler_Context, req: std.http.Server.Request, server_name: []const u8, timeout: std.Io.Timeout) std.Io.Cancelable!void {
             log.debug("{f}: {t} {s}", .{ ctx.cid, req.head.method, req.head.target });
-            defer log.debug("{f}: Finished processing request", .{ ctx.cid });
+            defer log.debug("{f}: Finished processing request", .{ctx.cid});
 
-            const Result = union (enum) {
+            const Result = union(enum) {
                 request: std.Io.Cancelable!void,
                 timeout: std.Io.Cancelable!void,
             };
@@ -409,7 +409,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             defer select.cancelDiscard();
 
             select.concurrent(.timeout, std.Io.Timeout.sleep, .{ timeout, self.loop.io }) catch {
-                log.warn("Failed to start timeout task for {f}", .{ ctx.cid });
+                log.warn("Failed to start timeout task for {f}", .{ctx.cid});
             };
             select.async(.request, process_request_inner, .{ self, ctx, req, server_name });
 
@@ -436,7 +436,7 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
                 .response = .{
                     .headers = .empty,
                     .version = req.head.version,
-                    .status = @enumFromInt(0),
+                    .status = @fromBackingInt(@intCast(0)),
                     .reason = null,
                     .keep_alive = true,
                     .transfer_encoding = null,

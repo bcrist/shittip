@@ -1,6 +1,5 @@
 /// usage:
 ///    hash_file <basename> <input_path> <compressed_output_path> <hash_metadata_output_path>
-
 const Hash = std.crypto.hash.sha2.Sha256;
 const Digest = [Hash.digest_length]u8;
 

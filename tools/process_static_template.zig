@@ -1,6 +1,5 @@
 /// usage:
 ///    process_static_template <input_file> <output_file> <depfile_path> [[-t <extension>]... <search_path>]...
-
 pub fn main(init: std.process.Init) !void {
     var stderr_buf: [64]u8 = undefined;
     var stderr = std.Io.File.stderr().writer(init.io, &stderr_buf);
@@ -54,16 +53,16 @@ pub fn main(init: std.process.Init) !void {
     var depfile_buf: [4096]u8 = undefined;
     var depfile_writer = depfile.writer(init.io, &depfile_buf);
     const dw = &depfile_writer.interface;
-    try dw.print("\"{s}\":", .{ out_path });
+    try dw.print("\"{s}\":", .{out_path});
 
     for (cache.files.values()) |file| {
         if (std.mem.indexOfScalar(u8, file.realpath, '#') == null) {
-            try dw.print(" \"{s}\"", .{ file.realpath });
+            try dw.print(" \"{s}\"", .{file.realpath});
         }
     }
 
     try dw.flush();
-    
+
     try stderr.interface.flush();
 }
 

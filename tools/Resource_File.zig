@@ -1,6 +1,6 @@
 cache: *Cache,
 realpath: []const u8,
-source: union (enum) {
+source: union(enum) {
     template: Template.Source,
     raw: []const u8,
 },
@@ -66,7 +66,7 @@ pub const Cache = struct {
             try parser.append(source);
 
             if (parser.fragments.get(frag)) |frag_info| {
-                const content = try std.fmt.allocPrint(self.arena, "\\\\{s}", .{ frag_info.content });
+                const content = try std.fmt.allocPrint(self.arena, "\\\\{s}", .{frag_info.content});
                 errdefer self.arena.free(content);
 
                 var tokens = try Template.Token.lex(self.arena, content);
@@ -84,13 +84,13 @@ pub const Cache = struct {
                         .path = realpath,
                         .source = content,
                         .tokens = tokens,
-                    }},
+                    } },
                 };
 
                 try self.files.put(self.gpa, path_copy, file);
                 return file;
             }
-            
+
             return error.InvalidTemplateFragment;
         }
 
@@ -125,7 +125,7 @@ pub const Cache = struct {
                         .path = realpath,
                         .source = source,
                         .tokens = tokens,
-                    }},
+                    } },
                 };
             } else {
                 file.* = .{
@@ -227,12 +227,12 @@ pub fn compute_http_path(self: *Resource_File, arena: std.mem.Allocator, temp: s
 
 const empty_source: []const u8 = "";
 const empty_tokens: Template.Token.List = .{
-    .kinds = &.{ .eof },
-    .spans = @as([]const []const u8, &.{ empty_source }).ptr,
+    .kinds = &.{.eof},
+    .spans = @as([]const []const u8, &.{empty_source}).ptr,
 };
 
 pub fn template_include(p: *Template.Parser, raw_path: []const u8) anyerror!Template.Source {
-    const c: *Cache = @alignCast(@ptrCast(p.callback_context orelse return .{
+    const c: *Cache = @ptrCast(@alignCast(p.callback_context orelse return .{
         .path = "",
         .source = empty_source,
         .tokens = empty_tokens,
@@ -256,7 +256,7 @@ pub fn template_include(p: *Template.Parser, raw_path: []const u8) anyerror!Temp
 }
 
 pub fn template_resource(p: *Template.Parser, raw_path: []const u8) anyerror![]const u8 {
-    const c: *Cache = @alignCast(@ptrCast(p.callback_context orelse return ""));
+    const c: *Cache = @ptrCast(@alignCast(p.callback_context orelse return ""));
     const file = try c.get(raw_path);
     return try file.compute_http_path(c.arena, c.gpa);
 }

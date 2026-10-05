@@ -1,6 +1,5 @@
 /// usage:
 ///    generate_res <templates_dir> <metadata_dir> <output_file> <template_string_data_output_file> <depfile_path> [[-t <extension>]... <search_path>]...
-
 pub fn main(init: std.process.Init) !void {
     var stderr_buf: [64]u8 = undefined;
     var stderr = std.Io.File.stderr().writer(init.io, &stderr_buf);
@@ -55,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
             \\
             \\pub const templates = struct {{
             \\
-            , .{ std.Io.Clock.real.now(init.io).toSeconds() });
+        , .{std.Io.Clock.real.now(init.io).toSeconds()});
 
         var parser: Template.Parser = .{
             .gpa = init.gpa,
@@ -68,7 +67,7 @@ pub fn main(init: std.process.Init) !void {
 
         var temp_writer = std.Io.Writer.Allocating.fromArrayList(init.gpa, &temp);
         const tw = &temp_writer.writer;
-        
+
         var template_dir = try std.Io.Dir.cwd().openDir(init.io, template_dir_path, .{ .iterate = true });
         defer template_dir.close(init.io);
 
@@ -82,7 +81,7 @@ pub fn main(init: std.process.Init) !void {
 
             var path_buf: [std.Io.Dir.max_path_bytes + 100]u8 = undefined;
             var path_buf_frag: [std.Io.Dir.max_path_bytes + 100]u8 = undefined;
-            const operands_name = try std.fmt.bufPrint(&path_buf, "{s}.operand", .{ entry.path });
+            const operands_name = try std.fmt.bufPrint(&path_buf, "{s}.operand", .{entry.path});
             const opcodes_name = operands_name[0 .. operands_name.len - "erand".len];
             const base_path = operands_name[0 .. operands_name.len - ".operand".len];
             std.mem.replaceScalar(u8, operands_name, '\\', '/');
@@ -91,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
             try parser.append(source);
 
             for (parser.fragments.keys(), parser.fragments.values()) |frag_name, frag_info| {
-                const frag_suffix = try std.fmt.bufPrint(path_buf_frag[base_path.len..], "#{s}", .{ frag_name });
+                const frag_suffix = try std.fmt.bufPrint(path_buf_frag[base_path.len..], "#{s}", .{frag_name});
                 const template_name = path_buf_frag[0 .. base_path.len + frag_suffix.len];
                 if (frag_info.first_instruction + frag_info.instruction_count >= parser.instructions.len) {
                     try out.print("    pub const {f}: Template = .{{ .opcodes = data.{f}[{d}..], .operands = data.{f}[{d}..].ptr, .literal_data = data.strings }};\n", .{
@@ -122,7 +121,6 @@ pub fn main(init: std.process.Init) !void {
                 std.zig.fmtId(operands_name),
             });
 
-
             try tw.print("\n        pub const {f}: []const Template.Opcode = @ptrCast(&[_]u8 {{", .{
                 std.zig.fmtId(opcodes_name),
             });
@@ -138,7 +136,7 @@ pub fn main(init: std.process.Init) !void {
                     i += 1;
                     try tw.writeByte(' ');
                 }
-                try tw.print("{},", .{ @intFromEnum(word) });
+                try tw.print("{},", .{@backingInt(word)});
             }
 
             try tw.print("\n        }});\n        pub const {f}: []const Template.Operands = @ptrCast(&[_]u32 {{", .{
@@ -156,7 +154,7 @@ pub fn main(init: std.process.Init) !void {
                     i += 1;
                     try tw.writeByte(' ');
                 }
-                try tw.print("0x{X},", .{ word.offset });
+                try tw.print("0x{X},", .{word.offset});
             }
 
             try tw.writeAll("\n        });\n");
@@ -284,11 +282,11 @@ pub fn main(init: std.process.Init) !void {
         var depfile_writer = depfile.writer(init.io, &buf);
         const dw = &depfile_writer.interface;
 
-        try dw.print("\"{s}\":", .{ out_path });
+        try dw.print("\"{s}\":", .{out_path});
 
         for (cache.files.values()) |file| {
             if (std.mem.indexOfScalar(u8, file.realpath, '#') == null) {
-                try dw.print(" \"{s}\"", .{ file.realpath });
+                try dw.print(" \"{s}\"", .{file.realpath});
             }
         }
 

@@ -1,4 +1,4 @@
-pub const Charset = union (enum) {
+pub const Charset = union(enum) {
     ascii,
     utf8,
     iso_8859_1,

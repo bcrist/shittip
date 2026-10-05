@@ -50,7 +50,7 @@ pub fn build(b: *std.Build) void {
     });
     b.step("citest", "Run all tests").dependOn(&b.addRunArtifact(citests).step);
 
-    inline for ([_]std.builtin.OptimizeMode { .Debug, .ReleaseFast }) |mode| {
+    inline for ([_]std.builtin.OptimizeMode{ .Debug, .ReleaseFast }) |mode| {
         const suffix = switch (mode) {
             .Debug => "_debug",
             .ReleaseFast => "",
@@ -95,9 +95,9 @@ pub fn build(b: *std.Build) void {
 
 pub const Resource_Path = struct {
     path: []const u8,
-    ignored_extensions: []const[]const u8 = &.{ ".zig" },
-    template_extensions: []const[]const u8 = &.{ ".htm", ".html", ".zk" },
-    static_template_extensions: []const[]const u8 = &.{ ".css", ".szk" },
+    ignored_extensions: []const []const u8 = &.{".zig"},
+    template_extensions: []const []const u8 = &.{ ".htm", ".html", ".zk" },
+    static_template_extensions: []const []const u8 = &.{ ".css", ".szk" },
 };
 pub const Resource_Options = struct {
     shittip: ?*std.Build.Dependency = null,
@@ -162,8 +162,8 @@ pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_
         compute_hash.addArg(entry.subpath);
         compute_hash.addFileArg(b.path(entry.base).path(b, entry.subpath));
 
-        const f = b.fmt("f{}", .{ n });
-        const h = b.fmt("h{}", .{ n });
+        const f = b.fmt("f{}", .{n});
+        const h = b.fmt("h{}", .{n});
 
         const compressed_out = compute_hash.addOutputFileArg(f);
         const hash_out = compute_hash.addOutputFileArg(h);
@@ -189,8 +189,8 @@ pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_
         compute_hash.addArg(entry.subpath);
         compute_hash.addFileArg(template_out);
 
-        const f = b.fmt("f{}", .{ n });
-        const h = b.fmt("h{}", .{ n });
+        const f = b.fmt("f{}", .{n});
+        const h = b.fmt("h{}", .{n});
 
         const compressed_out = compute_hash.addOutputFileArg(f);
         const hash_out = compute_hash.addOutputFileArg(h);

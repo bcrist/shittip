@@ -1,5 +1,4 @@
 /// For use with headers ETag, If-Match, If-None-Match, etc.
-
 remaining: []const u8,
 
 pub const Result = struct {

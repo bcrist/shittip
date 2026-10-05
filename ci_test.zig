@@ -7,13 +7,15 @@ test "server lifecycle" {
 
     const r = http.routing;
     try server.router("", .{
-        .{ "/hello",
+        .{
+            "/hello",
             r.static_internal(.{
                 .content = "Hello World",
                 .content_type = .text_utf8,
             }),
         },
-        .{ "/shutdown",
+        .{
+            "/shutdown",
             r.static_internal(.{
                 .content = "Shutting Down",
                 .content_type = .html_utf8,
@@ -33,16 +35,16 @@ test "server lifecycle" {
 }
 
 test "Range.parse" {
-    try std.testing.expectFmt("[0...0]", "{f}", .{ try http.Range.parse("0-0") });
-    try std.testing.expectFmt("[0...]", "{f}", .{ try http.Range.parse("0-") });
-    try std.testing.expectFmt("[500...]", "{f}", .{ try http.Range.parse("500-") });
-    try std.testing.expectFmt("[500...501]", "{f}", .{ try http.Range.parse("500-501") });
-    try std.testing.expectFmt("[...500]", "{f}", .{ try http.Range.parse("-500") });
-    try std.testing.expectFmt("[0...0]", "{f}", .{ try http.Range.parse(" 0 - 0 ") });
-    try std.testing.expectFmt("[0...]", "{f}", .{ try http.Range.parse(" 0 - ") });
-    try std.testing.expectFmt("[500...]", "{f}", .{ try http.Range.parse(" 500 - ") });
-    try std.testing.expectFmt("[500...501]", "{f}", .{ try http.Range.parse("    500      - 501    ") });
-    try std.testing.expectFmt("[...500]", "{f}", .{ try http.Range.parse(" - 500  ") });
+    try std.testing.expectFmt("[0...0]", "{f}", .{try http.Range.parse("0-0")});
+    try std.testing.expectFmt("[0...]", "{f}", .{try http.Range.parse("0-")});
+    try std.testing.expectFmt("[500...]", "{f}", .{try http.Range.parse("500-")});
+    try std.testing.expectFmt("[500...501]", "{f}", .{try http.Range.parse("500-501")});
+    try std.testing.expectFmt("[...500]", "{f}", .{try http.Range.parse("-500")});
+    try std.testing.expectFmt("[0...0]", "{f}", .{try http.Range.parse(" 0 - 0 ")});
+    try std.testing.expectFmt("[0...]", "{f}", .{try http.Range.parse(" 0 - ")});
+    try std.testing.expectFmt("[500...]", "{f}", .{try http.Range.parse(" 500 - ")});
+    try std.testing.expectFmt("[500...501]", "{f}", .{try http.Range.parse("    500      - 501    ")});
+    try std.testing.expectFmt("[...500]", "{f}", .{try http.Range.parse(" - 500  ")});
     try std.testing.expectError(error.BadRange, http.Range.parse(""));
     try std.testing.expectError(error.BadRange, http.Range.parse("   "));
     try std.testing.expectError(error.BadRange, http.Range.parse("--"));
@@ -53,12 +55,12 @@ test "Range.parse" {
 }
 
 test "Range.satisfy" {
-    try std.testing.expectFmt("[0..][0..1]", "{f}", .{ try (try http.Range.parse("0-0")).satisfy(1000) });
-    try std.testing.expectFmt("[0..][0..1000]", "{f}", .{ try (try http.Range.parse("0-")).satisfy(1000) });
-    try std.testing.expectFmt("[500..][0..500]", "{f}", .{ try (try http.Range.parse("500-")).satisfy(1000) });
-    try std.testing.expectFmt("[500..][0..2]", "{f}", .{ try (try http.Range.parse("500-501")).satisfy(1000) });
-    try std.testing.expectFmt("[500..][0..500]", "{f}", .{ try (try http.Range.parse("-500")).satisfy(1000) });
-    try std.testing.expectFmt("[900..][0..100]", "{f}", .{ try (try http.Range.parse("-100")).satisfy(1000) });
+    try std.testing.expectFmt("[0..][0..1]", "{f}", .{try (try http.Range.parse("0-0")).satisfy(1000)});
+    try std.testing.expectFmt("[0..][0..1000]", "{f}", .{try (try http.Range.parse("0-")).satisfy(1000)});
+    try std.testing.expectFmt("[500..][0..500]", "{f}", .{try (try http.Range.parse("500-")).satisfy(1000)});
+    try std.testing.expectFmt("[500..][0..2]", "{f}", .{try (try http.Range.parse("500-501")).satisfy(1000)});
+    try std.testing.expectFmt("[500..][0..500]", "{f}", .{try (try http.Range.parse("-500")).satisfy(1000)});
+    try std.testing.expectFmt("[900..][0..100]", "{f}", .{try (try http.Range.parse("-100")).satisfy(1000)});
 }
 
 test "Range.Satisfied.maybe_coalesce" {
@@ -70,22 +72,22 @@ test "Range.Satisfied.maybe_coalesce" {
     try std.testing.expectEqual(r2, r2.maybe_coalesce(r2, 10));
     try std.testing.expectEqual(r3, r3.maybe_coalesce(r3, 1000));
 
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 0, .len = 105 }, r1.maybe_coalesce(r2, 0));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 0, .len = 105 }, r2.maybe_coalesce(r1, 0));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 0, .len = 105 }, r1.maybe_coalesce(r2, 50));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 0, .len = 105 }, r2.maybe_coalesce(r1, 50));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 0, .len = 105 }, r1.maybe_coalesce(r2, 0));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 0, .len = 105 }, r2.maybe_coalesce(r1, 0));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 0, .len = 105 }, r1.maybe_coalesce(r2, 50));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 0, .len = 105 }, r2.maybe_coalesce(r1, 50));
 
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 5, .len = 100 }, r2.maybe_coalesce(r3, 0));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 5, .len = 100 }, r3.maybe_coalesce(r2, 0));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 5, .len = 100 }, r2.maybe_coalesce(r3, 50));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 5, .len = 100 }, r3.maybe_coalesce(r2, 50));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 5, .len = 100 }, r2.maybe_coalesce(r3, 0));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 5, .len = 100 }, r3.maybe_coalesce(r2, 0));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 5, .len = 100 }, r2.maybe_coalesce(r3, 50));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 5, .len = 100 }, r3.maybe_coalesce(r2, 50));
 
     try std.testing.expectEqual(null, r1.maybe_coalesce(r3, 0));
     try std.testing.expectEqual(null, r3.maybe_coalesce(r1, 0));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 0, .len = 60 }, r1.maybe_coalesce(r3, 50));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 0, .len = 60 }, r3.maybe_coalesce(r1, 50));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 0, .len = 60 }, r1.maybe_coalesce(r3, 40));
-    try std.testing.expectEqual(http.Range.Satisfied { .offset = 0, .len = 60 }, r3.maybe_coalesce(r1, 40));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 0, .len = 60 }, r1.maybe_coalesce(r3, 50));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 0, .len = 60 }, r3.maybe_coalesce(r1, 50));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 0, .len = 60 }, r1.maybe_coalesce(r3, 40));
+    try std.testing.expectEqual(http.Range.Satisfied{ .offset = 0, .len = 60 }, r3.maybe_coalesce(r1, 40));
     try std.testing.expectEqual(null, r1.maybe_coalesce(r3, 39));
     try std.testing.expectEqual(null, r3.maybe_coalesce(r1, 39));
 }
@@ -93,28 +95,28 @@ test "Range.Satisfied.maybe_coalesce" {
 test "Range.Iterator" {
     var iter: http.Range.Iterator = try .init("bytes=1-10,50-100");
     try std.testing.expectEqualStrings("bytes", iter.unit);
-    try std.testing.expectFmt("[1...10]", "{?f}", .{ try iter.next() });
-    try std.testing.expectFmt("[50...100]", "{?f}", .{ try iter.next() });
-    try std.testing.expectFmt("null", "{?f}", .{ try iter.next() });
+    try std.testing.expectFmt("[1...10]", "{?f}", .{try iter.next()});
+    try std.testing.expectFmt("[50...100]", "{?f}", .{try iter.next()});
+    try std.testing.expectFmt("null", "{?f}", .{try iter.next()});
 
     iter = try .init("monkeys   =   1-10  ,   50-100   ");
     try std.testing.expectEqualStrings("monkeys", iter.unit);
-    try std.testing.expectFmt("[1...10]", "{?f}", .{ try iter.next() });
-    try std.testing.expectFmt("[50...100]", "{?f}", .{ try iter.next() });
-    try std.testing.expectFmt("null", "{?f}", .{ try iter.next() });
+    try std.testing.expectFmt("[1...10]", "{?f}", .{try iter.next()});
+    try std.testing.expectFmt("[50...100]", "{?f}", .{try iter.next()});
+    try std.testing.expectFmt("null", "{?f}", .{try iter.next()});
 
     try std.testing.expectError(error.BadRange, http.Range.Iterator.init("asdf"));
 
     iter = try .init("bytes   =   1--  ,   50-100   ");
     try std.testing.expectEqualStrings("bytes", iter.unit);
     try std.testing.expectError(error.BadRange, iter.next());
-    try std.testing.expectFmt("[50...100]", "{?f}", .{ try iter.next() });
-    try std.testing.expectFmt("null", "{?f}", .{ try iter.next() });
+    try std.testing.expectFmt("[50...100]", "{?f}", .{try iter.next()});
+    try std.testing.expectFmt("null", "{?f}", .{try iter.next()});
 
     iter = try .init("bytes   =   1--  ,   50-100   ");
     try std.testing.expectEqualStrings("bytes", iter.unit);
-    try std.testing.expectFmt("[50...100]", "{?f}", .{ iter.next_valid() });
-    try std.testing.expectFmt("null", "{?f}", .{ iter.next_valid() });
+    try std.testing.expectFmt("[50...100]", "{?f}", .{iter.next_valid()});
+    try std.testing.expectFmt("null", "{?f}", .{iter.next_valid()});
 
     iter = try .init("bytes= 1-5, 10-20, 25-30, 100-500, 7-8, 6-6, 9-9, 50-100");
     const coalesced = try iter.coalesce(std.testing.allocator, 1000, 0);
@@ -147,7 +149,7 @@ test "Range.Writer single range" {
     var rw: http.Range.Writer = .init(&out.writer, 10000, &.{
         .{ .offset = 5, .len = 5 },
     }, "asdfasdfasdf", "text/plain", &buf);
-    
+
     var data: [10][]const u8 = .{
         "012",
         "3456789abcdef",
@@ -177,7 +179,7 @@ test "Range.Writer multiple ranges" {
         .{ .offset = 10, .len = 20 },
         .{ .offset = 40, .len = 50 },
     }, "asdfasdfasdf", "text/plain", &buf);
-    
+
     var data: [10][]const u8 = .{
         "012",
         "3456789abcdef",
@@ -226,7 +228,7 @@ test "Range.Writer no content type" {
         .{ .offset = 10, .len = 20 },
         .{ .offset = 40, .len = 50 },
     }, "asdfasdfasdf", "", &buf);
-    
+
     var data: [8][]const u8 = .{
         "012",
         "3456789abcdef",

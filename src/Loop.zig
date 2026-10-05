@@ -4,7 +4,7 @@ gpa: std.mem.Allocator,
 servers: std.ArrayList(*Server_Tasks),
 servers_mutex: std.Io.Mutex,
 
-pub const State = enum (u32) {
+pub const State = enum(u32) {
     stopped,
     starting,
     running,

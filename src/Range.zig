@@ -25,10 +25,10 @@ pub fn format(self: Range, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         if (self.last) |last| {
             try writer.print("[{}...{}]", .{ first, last });
         } else {
-            try writer.print("[{}...]", .{ first });
+            try writer.print("[{}...]", .{first});
         }
     } else if (self.last) |last| {
-        try writer.print("[...{}]", .{ last });
+        try writer.print("[...{}]", .{last});
     } else {
         try writer.writeAll("[...]");
     }
@@ -139,10 +139,7 @@ pub const Iterator = struct {
     pub fn init(range_header: []const u8) error{BadRange}!Iterator {
         const equal_pos = std.mem.findScalar(u8, range_header, '=') orelse return error.BadRange;
         const unit = std.mem.trim(u8, range_header[0..equal_pos], &std.ascii.whitespace);
-        return .{
-            .unit = unit,
-            .inner = std.mem.splitScalar(u8, range_header[equal_pos + 1 ..], ',')
-        };
+        return .{ .unit = unit, .inner = std.mem.splitScalar(u8, range_header[equal_pos + 1 ..], ',') };
     }
 
     pub fn next(self: *Iterator) error{BadRange}!?Range {
@@ -154,7 +151,7 @@ pub const Iterator = struct {
         while (true) return self.next() catch continue;
     }
 
-    const Coalesce_Error = error {
+    const Coalesce_Error = error{
         BadRange,
         OutOfMemory,
     };
@@ -288,7 +285,7 @@ pub const Writer = struct {
                     continue :check_skip;
                 }
             }
-            
+
             if (splat_mut == 0) break;
             const splat_data = data_mut[data_mut.len - 1];
             if (splat_data.len == 0) break;
@@ -314,7 +311,7 @@ pub const Writer = struct {
 
             break;
         }
-        
+
         if (self.skip_remaining == 0 and self.body_remaining > 0 and (header.len > 0 or data_mut.len > 1 or splat_mut > 0 and data_mut[data_mut.len - 1].len > 0)) {
             // make sure we don't lose track of bytes in case self.out.writeSplatHeaderLimit returns an error:
             if (processed_bytes > w.end) return processed_bytes - w.end;

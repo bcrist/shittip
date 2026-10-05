@@ -6,7 +6,7 @@
 //!    * `content-encoding: deflate`
 //!    * `range: bytes` requests
 //!    * status code 304 Not Modified via etag and last modified
-//! 
+//!
 //! Example usage:
 //!
 //!    var index: http.Static_Updatable = try .init(gpa, io, "index.zk", .{
@@ -20,7 +20,7 @@
 //!        .{ "/index", "index" },
 //!        // ...
 //!    });
-//! 
+//!
 //!    // some time later:
 //!    try index.update(io, "index.zk", .{
 //!        .some_value_1 = new_whatever1,
@@ -79,7 +79,7 @@ pub fn update(self: *Static_Updatable, io: std.Io, comptime template_path: []con
     try compress.finish();
 
     const hash = hasher.hasher.finalResult();
-    const etag = try std.fmt.allocPrint(self.gpa, "{x}", .{ hash });
+    const etag = try std.fmt.allocPrint(self.gpa, "{x}", .{hash});
     errdefer self.gpa.free(etag);
 
     try self.lock.lock(io);

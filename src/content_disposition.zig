@@ -1,4 +1,4 @@
-pub const Content_Disposition = union (enum) {
+pub const Content_Disposition = union(enum) {
     @"inline",
     attachment,
     attachment_filename: []const u8,
@@ -45,7 +45,7 @@ pub const Content_Disposition = union (enum) {
     }
 
     pub fn to_string(comptime self: Content_Disposition) []const u8 {
-        return comptime std.fmt.comptimePrint("{f}", .{ self });
+        return comptime std.fmt.comptimePrint("{f}", .{self});
     }
 };
 

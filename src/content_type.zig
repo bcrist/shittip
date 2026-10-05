@@ -1,4 +1,4 @@
-pub const Content_Type = union (enum) {
+pub const Content_Type = union(enum) {
     text: ?Charset,
     html: ?Charset,
     css: ?Charset,
@@ -24,7 +24,7 @@ pub const Content_Type = union (enum) {
     mp3,
     vorbis,
     other: struct {
-        @"type": []const u8,
+        type: []const u8,
         subtype: []const u8,
         param: ?Param,
     },
@@ -47,7 +47,7 @@ pub const Content_Type = union (enum) {
             .svg, .jpeg, .png, .gif, .icon => "image",
             .ttf, .otf, .woff2 => "font",
             .mp3, .vorbis => "audio",
-            .other => |info| info.@"type",
+            .other => |info| info.type,
         };
     }
 
@@ -79,17 +79,14 @@ pub const Content_Type = union (enum) {
                     .value = cs.to_string(),
                 } else null;
             },
-            .form_multipart => |boundary| .{
-                .name = "boundary",
-                .value = boundary
-            },
+            .form_multipart => |boundary| .{ .name = "boundary", .value = boundary },
             .binary, .pdf, .zip, .gzip, .xz, .jpeg, .png, .gif, .icon, .ttf, .otf, .woff2, .mp3, .vorbis => null,
             .other => |info| info.param,
         };
     }
 
     pub fn format(self: Content_Type, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        try writer.writeAll(self.@"type"());
+        try writer.writeAll(self.type());
         try writer.writeByte('/');
         try writer.writeAll(self.subtype());
         if (self.param()) |p| {
@@ -101,7 +98,7 @@ pub const Content_Type = union (enum) {
     }
 
     pub fn to_string(comptime self: Content_Type) []const u8 {
-        return comptime std.fmt.comptimePrint("{f}", .{ self });
+        return comptime std.fmt.comptimePrint("{f}", .{self});
     }
 
     pub fn parse(str: []const u8) Content_Type {
@@ -141,15 +138,15 @@ pub const Content_Type = union (enum) {
 
         const type_part = if (std.mem.indexOfScalar(u8, initial_part, '/')) |end| initial_part[0..end] else initial_part;
         const subtype_part = if (type_part.len < initial_part.len) initial_part[type_part.len + 1 ..] else "";
-        
+
         return .{ .other = .{
-            .@"type" = type_part,
+            .type = type_part,
             .subtype = subtype_part,
             .param = if (name_trimmed.len > 0 or value_trimmed.len > 0) .{
                 .name = name_trimmed,
                 .value = value_trimmed,
             } else null,
-        }};
+        } };
     }
 
     const mime_lookup = std.StaticStringMapWithEql(Content_Type, std.ascii.eqlIgnoreCase).initComptime(.{
@@ -189,7 +186,7 @@ pub const Content_Type = union (enum) {
         .{ "font/woff2", Content_Type.woff2 },
         .{ "audio/mpeg", Content_Type.mp3 },
         .{ "audio/vorbis", Content_Type.vorbis },
-        .{ "multipart/form-data", Content_Type { .form_multipart = "" } },
+        .{ "multipart/form-data", Content_Type{ .form_multipart = "" } },
         .{ "application/x-www-form-urlencoded", Content_Type.form_urlencoded_utf8 },
     });
 
@@ -201,7 +198,7 @@ pub const Content_Type = union (enum) {
         .{ ".css", Content_Type.css_utf8 },
         .{ ".js", Content_Type.javascript_utf8 },
         .{ ".json", Content_Type.json_utf8 },
-        .{ ".xml",  Content_Type.xml_utf8 },
+        .{ ".xml", Content_Type.xml_utf8 },
         .{ ".csv", Content_Type.csv_utf8 },
         .{ ".jpg", Content_Type.jpeg },
         .{ ".png", Content_Type.png },

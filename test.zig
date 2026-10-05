@@ -1,5 +1,3 @@
-
-
 fn run_server_guarded() void {
     run_server() catch @panic("run_server() errored!");
 }
@@ -10,13 +8,15 @@ fn run_server(loop: *http.Loop) !void {
 
     const r = http.routing;
     try server.router("", .{
-        .{ "/hello",
+        .{
+            "/hello",
             r.static_internal(.{
                 .content = "Hello World",
                 .content_type = .text_utf8,
             }),
         },
-        .{ "/shutdown",
+        .{
+            "/shutdown",
             r.static_internal(.{
                 .content = "Shutting Down",
                 .content_type = .html_utf8,
@@ -33,12 +33,11 @@ fn run_server(loop: *http.Loop) !void {
     loop.begin_running();
 }
 
-
 test "server lifecycle" {
     var loop: http.Loop = .init(std.testing.io, std.testing.allocator);
     defer loop.deinit();
 
-    var server_future = try std.testing.io.concurrent(run_server, .{ &loop });
+    var server_future = try std.testing.io.concurrent(run_server, .{&loop});
 
     var client: std.http.Client = .{
         .io = std.testing.io,
