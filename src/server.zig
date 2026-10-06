@@ -660,7 +660,7 @@ const Handler_Context = struct {
     writer: *std.Io.net.Stream.Writer,
     server: *std.http.Server,
 
-    pub fn log_error(ctx: Handler_Context, comptime msg: []const u8, err: anyerror, maybe_trace: ?*std.builtin.StackTrace) void {
+    pub fn log_error(ctx: Handler_Context, comptime msg: []const u8, err: anyerror, maybe_trace: ?*std.lang.StackTrace) void {
         log.warn("{f}: " ++ msg ++ ": {t}", .{ ctx.cid, err });
 
         if (maybe_trace) |trace| {

@@ -66,13 +66,13 @@ pub const Cache = struct {
             try parser.append(source);
 
             if (parser.fragments.get(frag)) |frag_info| {
-                const content = try std.fmt.allocPrint(self.arena, "\\\\{s}", .{frag_info.content});
+                const content = try self.arena.print("\\\\{s}", .{frag_info.content});
                 errdefer self.arena.free(content);
 
                 var tokens = try Template.Token.lex(self.arena, content);
                 errdefer tokens.deinit(self.arena);
 
-                const realpath = try std.fmt.allocPrint(self.arena, "{s}#{s}", .{ base_file.realpath, frag });
+                const realpath = try self.arena.print("{s}#{s}", .{ base_file.realpath, frag });
                 errdefer self.arena.free(realpath);
 
                 const path_copy = try self.arena.dupe(u8, path);
@@ -220,7 +220,7 @@ pub fn compute_http_path(self: *Resource_File, arena: std.mem.Allocator, temp: s
     if (self.http_path) |path| return path;
 
     const hash = try self.compute_digest(temp);
-    const path = try std.fmt.allocPrint(arena, "/{x}{s}", .{ &hash, std.Io.Dir.path.extension(self.realpath) });
+    const path = try arena.print("/{x}{s}", .{ &hash, std.Io.Dir.path.extension(self.realpath) });
     self.http_path = path;
     return path;
 }

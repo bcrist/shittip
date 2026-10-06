@@ -1,4 +1,4 @@
-bitset: std.DynamicBitSetUnmanaged,
+bitset: std.bit_set.Dynamic,
 
 pub const init: Index_Pool = .{
     .bitset = .{},
@@ -82,8 +82,8 @@ inline fn mask_bit(index: usize) Mask_Int {
     return @as(Mask_Int, 1) << @as(Shift_Int, @truncate(index));
 }
 
-const Mask_Int = std.DynamicBitSetUnmanaged.MaskInt;
-const Shift_Int = std.DynamicBitSetUnmanaged.ShiftInt;
+const Mask_Int = std.bit_set.Dynamic.MaskInt;
+const Shift_Int = std.bit_set.Dynamic.ShiftInt;
 
 const Index_Pool = @This();
 

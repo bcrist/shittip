@@ -35,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
     const hash_output_path = arg_iter.next() orelse return error.MissingHashOutputPath;
     try std.Io.Dir.cwd().writeFile(init.io, .{
         .sub_path = hash_output_path,
-        .data = try std.fmt.allocPrint(init.arena.allocator(), "{s}\n{d}\n{s}\n{x}\n", .{
+        .data = try init.arena.allocator().print("{s}\n{d}\n{s}\n{x}\n", .{
             original_path,
             content.len,
             std.Io.Dir.path.basename(compressed_output_path),

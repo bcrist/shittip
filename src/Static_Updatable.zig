@@ -79,7 +79,7 @@ pub fn update(self: *Static_Updatable, io: std.Io, comptime template_path: []con
     try compress.finish();
 
     const hash = hasher.hasher.finalResult();
-    const etag = try std.fmt.allocPrint(self.gpa, "{x}", .{hash});
+    const etag = try self.gpa.print("{x}", .{hash});
     errdefer self.gpa.free(etag);
 
     try self.lock.lock(io);

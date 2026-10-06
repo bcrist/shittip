@@ -75,7 +75,7 @@ pub fn router(svr: anytype, comptime prefix: []const u8, comptime routes: anytyp
 
         fn flow_name(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
             if (prefix_without_placeholder.len > 0) {
-                return try std.fmt.allocPrint(allocator, "{s}{s}", .{ prefix_without_placeholder, path });
+                return try allocator.print("{s}{s}", .{ prefix_without_placeholder, path });
             } else {
                 return path;
             }

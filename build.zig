@@ -50,7 +50,7 @@ pub fn build(b: *std.Build) void {
     });
     b.step("citest", "Run all tests").dependOn(&b.addRunArtifact(citests).step);
 
-    inline for ([_]std.builtin.OptimizeMode{ .Debug, .ReleaseFast }) |mode| {
+    inline for ([_]std.lang.Optimize{ .Debug, .ReleaseFast }) |mode| {
         const suffix = switch (mode) {
             .Debug => "_debug",
             .ReleaseFast => "",
@@ -253,8 +253,9 @@ const Resource_Files = struct {
 };
 
 fn report_path_err(allocator: std.mem.Allocator, path: []const u8, err: anyerror) noreturn {
-    @panic(std.fmt.allocPrint(allocator, "Failed to access path {s}: {s}", .{
+    _ = allocator;
+    std.debug.panic("Failed to access path {s}: {s}", .{
         path,
         @errorName(err),
-    }) catch "OOM");
+    });
 }

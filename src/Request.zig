@@ -743,7 +743,7 @@ const Respond_Err_Options = struct {
     empty_content: bool = false,
     status: std.http.Status = .internal_server_error,
     err: ?anyerror = null,
-    trace: ?*std.builtin.StackTrace = null,
+    trace: ?*std.lang.StackTrace = null,
 };
 pub fn respond_err(self: *Request, options: Respond_Err_Options) !void {
     if (self.response.state != .not_started) {
@@ -910,11 +910,11 @@ pub fn render(self: *Request, comptime template_path: []const u8, data: anytype,
 }
 
 pub fn fmt(self: *Request, comptime pattern: []const u8, args: anytype) std.mem.Allocator.Error![]u8 {
-    return std.fmt.allocPrint(self.arena_thread_safe(), pattern, args);
+    return self.arena_thread_safe().print(pattern, args);
 }
 
 pub fn fmt_http_date(self: *Request, dt: tempora.Date_Time) std.mem.Allocator.Error![]u8 {
-    return std.fmt.allocPrint(self.arena_thread_safe(), "{f}", .{dt.with_offset(0).fmt(tempora.Date_Time.With_Offset.http)});
+    return self.arena_thread_safe().print("{f}", .{dt.with_offset(0).fmt(tempora.Date_Time.With_Offset.http)});
 }
 
 const log = std.log.scoped(.http);
