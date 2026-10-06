@@ -113,6 +113,8 @@ pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_
     };
 
     for (paths) |path_options| {
+        b.dependOnDirectoryContents(b.path(path_options.path));
+
         var dir = b.root.createDirPathOpen(b.graph.io, path_options.path, .{ .open_options = .{ .iterate = true } }) catch |err| report_path_err(b.allocator, path_options.path, err);
         defer dir.close(b.graph.io);
 
