@@ -113,7 +113,8 @@ pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_
     };
 
     for (paths) |path_options| {
-        b.dependOnDirectoryContents(b.path(path_options.path));
+        const base_path = b.path(path_options.path);
+        b.dependOnDirectoryMetadata(base_path);
 
         var dir = b.root.createDirPathOpen(b.graph.io, path_options.path, .{ .open_options = .{ .iterate = true } }) catch |err| report_path_err(b.allocator, path_options.path, err);
         defer dir.close(b.graph.io);
@@ -122,7 +123,9 @@ pub fn resources(b: *std.Build, paths: []const Resource_Path, options: Resource_
         defer iter.deinit();
 
         while (iter.next(b.graph.io) catch |err| report_path_err(b.allocator, path_options.path, err)) |entry| {
-            if (entry.kind == .file or entry.kind == .sym_link) {
+            if (entry.kind == .directory) {
+                b.dependOnDirectoryMetadata(base_path.path(b, entry.path));
+            } else if (entry.kind == .file or entry.kind == .sym_link) {
                 files.maybe_add(entry.path, path_options);
             }
         }
