@@ -294,10 +294,6 @@ pub fn Server(comptime Injector_Type: type, comptime comptime_options: Comptime_
             while (true) {
                 const stream = server.accept(io) catch |err| switch (err) {
                     error.Canceled => |e| return e,
-                    error.WouldBlock => {
-                        try io.sleep(.fromMilliseconds(1), .awake);
-                        continue;
-                    },
                     error.ConnectionAborted => {
                         log.debug("{f}: Connection request was aborted remotely before the connection could be established", .{cid});
                         continue;
