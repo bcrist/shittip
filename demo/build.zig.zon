@@ -2,15 +2,15 @@
     .name = .shittip_demo,
     .fingerprint = 0x32f89c4ef259420e,
     .version = "0.0.0",
-    .minimum_zig_version = "0.17.0",
+    .minimum_zig_version = "0.18.0-dev.349+d924f83bf",
     .paths = .{""},
     .dependencies = .{
         .shittip = .{
             .path = "..",
         },
         .tempora = .{
-            .url = "git+https://codeberg.org/bcrist/tempora?ref=zig-master#11ae1882e8e40a45f0fdfae325110802930cebde",
-            .hash = "tempora-0.7.0-GTyeDUYxFwDxxKrDOi15rHMn5qO9C-jS_pJZcCy3UxmO",
+            .url = "git+https://codeberg.org/bcrist/tempora#3032af240e63bc1a58ed579ef8325a686822c0d4",
+            .hash = "tempora-0.7.1-GTyeDV4xFwDq8T3ufuED3KJFQSmcpCKmzmSzd5YEG0z3",
         },
         .zkittle = .{
             .url = "git+https://codeberg.org/bcrist/zkittle?ref=zig-master#e70339e1d620a6a9f488e3057ffda0ee41f3e9f5",
