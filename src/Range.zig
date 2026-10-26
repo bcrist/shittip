@@ -312,7 +312,7 @@ pub const Writer = struct {
             break;
         }
 
-        if (self.skip_remaining == 0 and self.body_remaining > 0 and (header.len > 0 or data_mut.len > 1 or splat_mut > 0 and data_mut[data_mut.len - 1].len > 0)) {
+        if (self.skip_remaining == 0 and self.body_remaining > 0 and (header.len > 0 or data_mut.len > 1 or (splat_mut > 0 and data_mut[data_mut.len - 1].len > 0))) {
             // make sure we don't lose track of bytes in case self.out.writeSplatHeaderLimit returns an error:
             if (processed_bytes > w.end) return processed_bytes - w.end;
 
